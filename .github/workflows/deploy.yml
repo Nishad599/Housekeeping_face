@@ -7,28 +7,22 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - name: Deploy to Production
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USERNAME }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          port: ${{ secrets.VM_PORT }}
-          script: |
-            cd /home/user1/Final_house/face-attendance
-            git pull origin main
-            
-            # Activate virtual environment and install latest dependencies
-            source venv/bin/activate
-            pip install -r requirements.txt
-            
-            # Restart the service (assuming there is a systemd service or use run.sh)
-            # If using a systemd service (recommended):
-            # sudo systemctl restart face-attendance
-            
-            # Alternatively, using start.sh (assuming it properly daemonizes or stops old processes)
-            chmod +x start.sh stop.sh
-            ./stop.sh || true
-            ./start.sh
+      - name: Pull latest code
+        run: |
+          cd /home/user1/Final_house/face-attendance
+          git pull origin main
+
+      - name: Install dependencies
+        run: |
+          cd /home/user1/Final_house/face-attendance
+          source venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Restart application
+        run: |
+          cd /home/user1/Final_house/face-attendance
+          chmod +x start.sh stop.sh
+          ./stop.sh || true
+          ./start.sh
