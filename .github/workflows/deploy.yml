@@ -23,33 +23,9 @@ jobs:
 
       - name: Restart application
         run: |
-          cd /home/user1/Final_house/face-attendance
-          chmod +x start.sh stop.sh run.sh
+          # Restart the systemd service instead of using nohup
+          sudo systemctl restart face-attendance
           
-          # Stop the current running instance
-          ./stop.sh || true
-          sleep 2
-          
-          # Start the app directly (not via start.sh to avoid nohup issues with runner)
-          source venv/bin/activate
-          PORT=${PORT:-8005}
-          HOST=${HOST:-0.0.0.0}
-          
-          SSL_OPTS=""
-          if [ -f "certs/cert.pem" ] && [ -f "certs/key.pem" ]; then
-              SSL_OPTS="--ssl-keyfile certs/key.pem --ssl-certfile certs/cert.pem"
-          fi
-          
-          nohup uvicorn app.main:app --host $HOST --port $PORT $SSL_OPTS > output.log 2>&1 &
-          echo $! > app.pid
-          
+          # Optional: check status to ensure it didn't crash
           sleep 3
-          
-          # Verify the app started
-          if ps -p $(cat app.pid) > /dev/null 2>&1; then
-              echo "✅ App restarted successfully (PID: $(cat app.pid))"
-          else
-              echo "❌ App failed to start! Check output.log"
-              tail -20 output.log
-              exit 1
-          fi
+          sudo systemctl is-active --quiet face-attendance || (sudo journalctl -u face-attendance -n 20 && exit 1)
