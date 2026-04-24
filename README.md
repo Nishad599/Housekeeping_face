@@ -280,3 +280,5 @@ DEFAULT_WEEKLY_OFF=Sunday
 | Create users | ✓ | ✗ | ✗ |
 | Export data | ✓ | ✓ | ✓ |
 | Punch (kiosk) | Public — no auth required |
+#   t e s t   d e p l o y  
+ 
