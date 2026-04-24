@@ -19,11 +19,37 @@ jobs:
         run: |
           cd /home/user1/Final_house/face-attendance
           source venv/bin/activate
-          pip install -r requirements.txt
+          pip install -r requirements.txt --quiet
 
       - name: Restart application
         run: |
           cd /home/user1/Final_house/face-attendance
-          chmod +x start.sh stop.sh
+          chmod +x start.sh stop.sh run.sh
+          
+          # Stop the current running instance
           ./stop.sh || true
-          ./start.sh
+          sleep 2
+          
+          # Start the app directly (not via start.sh to avoid nohup issues with runner)
+          source venv/bin/activate
+          PORT=${PORT:-8005}
+          HOST=${HOST:-0.0.0.0}
+          
+          SSL_OPTS=""
+          if [ -f "certs/cert.pem" ] && [ -f "certs/key.pem" ]; then
+              SSL_OPTS="--ssl-keyfile certs/key.pem --ssl-certfile certs/cert.pem"
+          fi
+          
+          nohup uvicorn app.main:app --host $HOST --port $PORT $SSL_OPTS > output.log 2>&1 &
+          echo $! > app.pid
+          
+          sleep 3
+          
+          # Verify the app started
+          if ps -p $(cat app.pid) > /dev/null 2>&1; then
+              echo "✅ App restarted successfully (PID: $(cat app.pid))"
+          else
+              echo "❌ App failed to start! Check output.log"
+              tail -20 output.log
+              exit 1
+          fi
