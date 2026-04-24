@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Face Attendance</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <div class="app-shell">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-brand">
+                <h2>Face Attendance</h2>
+                <small>Shift: 7 AM – 4 PM</small>
+            </div>
+            <div class="sidebar-nav">
+                <a href="/dashboard"><span class="icon">📊</span> Dashboard</a>
+                <a href="/punch"><span class="icon">📷</span> Punch Kiosk</a>
+                <a href="/staff"><span class="icon">👥</span> Staff</a>
+                <a href="/muster"><span class="icon">📘</span> Muster Book</a>
+            </div>
+            <div style="position:absolute;bottom:1rem;left:0;right:0;padding:0 1.25rem;">
+                <div style="color:rgba(255,255,255,0.5);font-size:0.8rem;margin-bottom:0.5rem;" id="userInfo"></div>
+                <a href="#" onclick="API.logout()" style="color:#f87171;font-size:0.85rem;text-decoration:none;">↩
+                    Logout</a>
+            </div>
+        </nav>
+
+        <!-- Main -->
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Dashboard</h1>
+                <p id="dateStr"></p>
+            </div>
+
+            <!-- Stats -->
+            <div class="stats-grid" id="stats">
+                <div class="stat-card primary">
+                    <div class="stat-label">Total Staff</div>
+                    <div class="stat-value" id="statTotal">-</div>
+                </div>
+                <div class="stat-card success">
+                    <div class="stat-label">Present Today</div>
+                    <div class="stat-value" id="statPresent">-</div>
+                </div>
+                <div class="stat-card danger">
+                    <div class="stat-label">Absent</div>
+                    <div class="stat-value" id="statAbsent">-</div>
+                </div>
+                <div class="stat-card warning">
+                    <div class="stat-label">Partial / Pending</div>
+                    <div class="stat-value" id="statPartial">-</div>
+                </div>
+            </div>
+
+            <!-- Today's Attendance Table -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>Today's Attendance</h3>
+                    <div class="flex gap-1">
+                        <button class="btn btn-primary btn-sm" onclick="openManualMarkModal()">+ Manual Mark</button>
+                        <button class="btn btn-outline btn-sm" onclick="loadDashboard()">↻ Refresh</button>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Emp ID</th>
+                                <th>Name</th>
+                                <th>Designation</th>
+                                <th>Punch In</th>
+                                <th>Punch Out</th>
+                                <th>Hours</th>
+                                <th>OT</th>
+                                <th>Status</th>
+                                <th style="width:50px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="todayTable">
+                            <tr>
+                                <td colspan="8" class="text-center text-muted">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Manual Mark Attendance Modal -->
+    <div class="modal-overlay" id="manualMarkModal">
+        <div class="modal">
+            <h3>Manual Attendance Mark</h3>
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">Mark attendance for staff without face
+                scan</p>
+            <div class="form-group">
+                <label>Select Staff *</label>
+                <select id="markStaffSelect" class="form-control">
+                    <option value="">-- Select Staff --</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Punch In Time</label>
+                    <input type="time" id="markPunchIn" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Punch Out Time</label>
+                    <input type="time" id="markPunchOut" class="form-control">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Status</label>
+                <select id="markStatus" class="form-control">
+                    <option value="Present">Present</option>
+                    <option value="Absent">Absent</option>
+                    <option value="Partial">Partial</option>
+                    <option value="Weekly Off">Weekly Off</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Reason *</label>
+                <input type="text" id="markReason" class="form-control"
+                    placeholder="e.g. Forgot to punch, System issue">
+            </div>
+            <div id="manualMarkResult"></div>
+            <div class="flex gap-1 mt-2">
+                <button class="btn btn-primary" onclick="submitManualMark()">Mark Attendance</button>
+                <button class="btn btn-outline" onclick="closeModal('manualMarkModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        if (!API.isLoggedIn()) window.location.href = '/login';
+
+        $('#userInfo').textContent = `${API.userName || 'User'} (${API.role || ''})`;
+        $('#dateStr').textContent = new Date().toLocaleDateString('en-IN', {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        });
+
+        async function loadDashboard() {
+            // Load staff count
+            const staff = await API.get('/api/staff/');
+            const totalStaff = staff ? staff.length : 0;
+            $('#statTotal').textContent = totalStaff;
+
+            // Load today's attendance
+            const today = await API.get('/api/attendance/today');
+            if (!today) return;
+
+            const present = today.filter(r => r.status === 'Present').length;
+            const partial = today.filter(r => ['Partial', 'Invalid'].includes(r.status)).length;
+
+            $('#statPresent').textContent = present;
+            $('#statPartial').textContent = partial;
+            $('#statAbsent').textContent = Math.max(0, totalStaff - present - partial);
+
+            const tbody = $('#todayTable');
+            if (today.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No attendance recorded yet today</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = today.map(r => `
+                <tr>
+                    <td><strong>${r.employee_id}</strong></td>
+                    <td>${r.name}</td>
+                    <td>${r.designation || '-'}</td>
+                    <td>${r.punch_in || '-'}</td>
+                    <td>${r.punch_out || '-'}</td>
+                    <td>${r.total_hours}</td>
+                    <td>${r.ot_hours}</td>
+                    <td>${statusBadge(r.status)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline" onclick="window.location.href='/muster?employee_id=${r.employee_id}'" title="View History">📅</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function closeModal(id) { $(`#${id}`).classList.remove('active'); }
+
+        async function openManualMarkModal() {
+            // Load staff list
+            const staff = await API.get('/api/staff/');
+            if (!staff) return;
+
+            const select = $('#markStaffSelect');
+            select.innerHTML = '<option value="">-- Select Staff --</option>' +
+                staff.map(s => `<option value="${s.employee_id}">${s.employee_id} - ${s.name}</option>`).join('');
+
+            // Reset form
+            $('#markPunchIn').value = '';
+            $('#markPunchOut').value = '';
+            $('#markStatus').value = 'Present';
+            $('#markReason').value = '';
+            $('#manualMarkResult').innerHTML = '';
+
+            $('#manualMarkModal').classList.add('active');
+        }
+
+        async function submitManualMark() {
+            const empId = $('#markStaffSelect').value;
+            const reason = $('#markReason').value.trim();
+
+            if (!empId) {
+                $('#manualMarkResult').innerHTML = '<div class="alert alert-danger">Please select a staff member</div>';
+                return;
+            }
+            if (!reason) {
+                $('#manualMarkResult').innerHTML = '<div class="alert alert-danger">Reason is required</div>';
+                return;
+            }
+
+            const body = {
+                punch_in_time: $('#markPunchIn').value || null,
+                punch_out_time: $('#markPunchOut').value || null,
+                status: $('#markStatus').value,
+                edit_reason: reason,
+            };
+
+            $('#manualMarkResult').innerHTML = '<div class="alert alert-info">Processing...</div>';
+
+            const res = await API.post(`/api/attendance/manual-mark/${empId}`, body);
+            if (res.detail) {
+                $('#manualMarkResult').innerHTML = `<div class="alert alert-danger">${res.detail}</div>`;
+            } else {
+                $('#manualMarkResult').innerHTML = `<div class="alert alert-success">${res.message}</div>`;
+                setTimeout(() => { closeModal('manualMarkModal'); loadDashboard(); }, 1500);
+            }
+        }
+
+        loadDashboard();
+        // Auto-refresh every 30 seconds
+        setInterval(loadDashboard, 30000);
+    </script>
+</body>
+
+</html>

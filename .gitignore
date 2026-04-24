@@ -1,0 +1,34 @@
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Database
+attendance.db
+*.db
+*.db.backup
+*.sqlite
+*.sqlite3
+
+# Models
+models/
+*.onnx
+
+# Environment & Secrets
+.env
+.env.*
+certs/
+*.pem
+
+# Logs & Pids
+output.log
+*.log
+app.pid
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Project specific
+sync_from_vm.bat
+project_architecture.md.resolved

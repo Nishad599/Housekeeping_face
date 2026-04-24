@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Muster Book - Face Attendance</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=2">
+    <style>
+        .matrix-table {
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            width: 120%;
+            table-layout: fixed;
+        }
+
+        .matrix-table th,
+        .matrix-table td {
+            border: 1px solid #e2e8f0;
+            padding: 4px 2px;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        .matrix-table thead th {
+            background: #f8fafc;
+            font-weight: 600;
+            font-size: 0.75rem;
+        }
+
+        .matrix-table td:first-child,
+        .matrix-table th:first-child {
+            width: 40px;
+            position: sticky;
+            left: 0;
+            background: white;
+            z-index: 10;
+        }
+
+        .matrix-table td:nth-child(2),
+        .matrix-table th:nth-child(2) {
+            width: 120px;
+            position: sticky;
+            left: 40px;
+            background: white;
+            z-index: 10;
+            text-align: left;
+            padding-left: 8px;
+        }
+
+        .matrix-table tr:hover td {
+            background-color: #f1f5f9;
+        }
+
+        .badge-ot {
+            background: #e0f2fe;
+            color: #0369a1;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-shell">
+        <nav class="sidebar">
+            <div class="sidebar-brand">
+                <h2>Face Attendance</h2>
+                <small>Shift: 7 AM – 4 PM</small>
+            </div>
+            <div class="sidebar-nav">
+                <a href="/dashboard"><span class="icon">📊</span> Dashboard</a>
+                <a href="/punch"><span class="icon">📷</span> Punch Kiosk</a>
+                <a href="/staff"><span class="icon">👥</span> Staff</a>
+                <a href="/muster"><span class="icon">📘</span> Muster Book</a>
+            </div>
+            <div style="position:absolute;bottom:1rem;left:0;right:0;padding:0 1.25rem;">
+                <a href="#" onclick="API.logout()" style="color:#f87171;font-size:0.85rem;text-decoration:none;">↩
+                    Logout</a>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1>Muster Book</h1>
+                <p>Monthly attendance register with OT calculations</p>
+            </div>
+
+            <!-- Filters -->
+            <div class="card">
+                <div class="flex gap-2 items-center" style="flex-wrap:wrap;">
+                    <div class="form-group" style="margin:0;">
+                        <label>Month</label>
+                        <select id="filterMonth" class="form-control" style="width:140px;">
+                            <option value="1">January</option>
+                            <option value="2">February</option>
+                            <option value="3">March</option>
+                            <option value="4">April</option>
+                            <option value="5">May</option>
+                            <option value="6">June</option>
+                            <option value="7">July</option>
+                            <option value="8">August</option>
+                            <option value="9">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Year</label>
+                        <input type="number" id="filterYear" class="form-control" style="width:100px;" min="2020">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Employee ID</label>
+                        <input type="text" id="filterEmp" class="form-control" style="width:130px;"
+                            placeholder="All staff">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Name</label>
+                        <input type="text" id="filterName" class="form-control" style="width:140px;"
+                            placeholder="Search name...">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Designation</label>
+                        <input type="text" id="filterDesig" class="form-control" style="width:140px;"
+                            placeholder="e.g. Housekeeping">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Location</label>
+                        <select id="filterLocation" class="form-control" style="width:120px;">
+                            <option value="">All</option>
+                            <option>Juhu</option>
+                            <option>Kharghar</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin:0;padding-top:1.3rem;">
+                        <button class="btn btn-primary" onclick="loadMuster()">Load</button>
+                    </div>
+                    <div class="form-group" style="margin:0;padding-top:1.3rem;">
+                        <button class="btn btn-success" onclick="exportExcel()">📥 Export Matrix</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Stats -->
+            <div class="stats-grid" id="musterStats" style="display:none;">
+                <div class="stat-card primary">
+                    <div class="stat-label">Total Records</div>
+                    <div class="stat-value" id="mStatTotal">0</div>
+                </div>
+                <div class="stat-card success">
+                    <div class="stat-label">Present Days</div>
+                    <div class="stat-value" id="mStatPresent">0</div>
+                </div>
+                <div class="stat-card warning">
+                    <div class="stat-label">Total OT Hours</div>
+                    <div class="stat-value" id="mStatOT">0</div>
+                </div>
+                <div class="stat-card danger">
+                    <div class="stat-label">Absent Days</div>
+                    <div class="stat-value" id="mStatAbsent">0</div>
+                </div>
+            </div>
+
+            <!-- Layout Toggle -->
+            <div class="flex gap-1 mb-1">
+                <button id="btnListView" class="btn btn-sm btn-outline active" onclick="setView('list')">List
+                    View</button>
+                <button id="btnMatrixView" class="btn btn-sm btn-outline" onclick="setView('matrix')">Matrix
+                    View</button>
+            </div>
+
+            <!-- Muster List Table -->
+            <div class="card" id="listView">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Emp ID</th>
+                                <th>Name</th>
+                                <th>Designation</th>
+                                <th>Punch In</th>
+                                <th>Punch Out</th>
+                                <th>Total Hours</th>
+                                <th>Regular</th>
+                                <th>OT</th>
+                                <th>Status</th>
+                                <th>Edited</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="musterTable">
+                            <tr>
+                                <td colspan="11" class="text-center text-muted">Select filter and click Load</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Muster Matrix Table -->
+            <div class="card" id="matrixView" style="display:none;">
+                <div class="table-wrap">
+                    <table class="matrix-table">
+                        <thead id="matrixHead"></thead>
+                        <tbody id="matrixBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Edit Record Modal -->
+    <div class="modal-overlay" id="editModal">
+        <div class="modal">
+            <h3>Edit Attendance Record</h3>
+            <div id="editInfo" class="text-muted mb-2"></div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Punch In (HH:MM)</label>
+                    <input type="time" id="editPunchIn" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Punch Out (HH:MM)</label>
+                    <input type="time" id="editPunchOut" class="form-control">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Status</label>
+                <select id="editStatus" class="form-control">
+                    <option value="">-- No change --</option>
+                    <option value="Present">Present</option>
+                    <option value="Absent">Absent</option>
+                    <option value="Partial">Partial</option>
+                    <option value="Weekly Off">Weekly Off</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Reason for Edit *</label>
+                <input type="text" id="editReason" class="form-control" placeholder="e.g. Forgot to punch out">
+            </div>
+            <div id="editResult"></div>
+            <div class="flex gap-1 mt-2">
+                <button class="btn btn-primary" onclick="saveEdit()">Save</button>
+                <button class="btn btn-outline" onclick="closeModal('editModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        if (!API.isLoggedIn()) window.location.href = '/login';
+
+        // Set defaults to current month
+        const urlParams = new URLSearchParams(window.location.search);
+        const now = new Date();
+        $('#filterMonth').value = urlParams.get('month') || (now.getMonth() + 1);
+        $('#filterYear').value = urlParams.get('year') || now.getFullYear();
+        if (urlParams.has('employee_id')) {
+            $('#filterEmp').value = urlParams.get('employee_id');
+        }
+
+        let currentView = 'list';
+
+        function setView(view) {
+            currentView = view;
+            $('#btnListView').classList.toggle('active', view === 'list');
+            $('#btnMatrixView').classList.toggle('active', view === 'matrix');
+            $('#listView').style.display = view === 'list' ? 'block' : 'none';
+            $('#matrixView').style.display = view === 'matrix' ? 'block' : 'none';
+            loadMuster();
+        }
+
+        async function loadMuster() {
+            if (currentView === 'matrix') return loadMatrix();
+
+            const month = $('#filterMonth').value;
+            const year = $('#filterYear').value;
+            const emp = $('#filterEmp').value.trim();
+            const name = $('#filterName').value.trim();
+            const desig = $('#filterDesig').value.trim();
+            const location = $('#filterLocation').value.trim();
+
+            const tbody = $('#musterTable');
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center">Loading...</td></tr>';
+
+            let url = `/api/attendance/muster?month=${month}&year=${year}`;
+            if (emp) url += `&employee_id=${encodeURIComponent(emp)}`;
+            if (name) url += `&name=${encodeURIComponent(name)}`;
+            if (desig) url += `&designation=${encodeURIComponent(desig)}`;
+            if (location) url += `&location=${encodeURIComponent(location)}`;
+
+            const data = await API.get(url);
+            if (!data) return;
+
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted">No records found</td></tr>';
+                $('#musterStats').style.display = 'none';
+                return;
+            }
+
+            // Stats
+            $('#musterStats').style.display = '';
+            $('#mStatTotal').textContent = data.length;
+            $('#mStatPresent').textContent = data.filter(r => r.status === 'Present').length;
+            $('#mStatAbsent').textContent = data.filter(r => r.status === 'Absent').length;
+            const totalOT = data.reduce((sum, r) => sum + (r.ot_minutes || 0), 0);
+            $('#mStatOT').textContent = `${Math.floor(totalOT / 60)}h`;
+
+            tbody.innerHTML = data.map(r => `
+                <tr>
+                    <td>${r.date}</td>
+                    <td><strong>${r.employee_id}</strong></td>
+                    <td>${r.name}</td>
+                    <td>${r.designation || '—'}</td>
+                    <td>${r.punch_in}</td>
+                    <td>${r.punch_out}</td>
+                    <td>${r.total_hours}</td>
+                    <td>${r.regular_hours}</td>
+                    <td>${r.ot_hours}</td>
+                    <td>${statusBadge(r.status)}</td>
+                    <td>${r.is_edited ? '<span class="badge badge-warning">Edited</span>' : '-'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline" title="Export this staff's monthly attendance"
+                            onclick="exportIndividual('${r.employee_id}')">📥</button>
+                        ${API.isAdmin() ? `<button class="btn btn-sm btn-outline" onclick="openEditModal(${r.id}, '${r.employee_id}', '${r.name}', '${r.date}')">✏️</button>` : ''}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadMatrix() {
+            const month = $('#filterMonth').value;
+            const year = $('#filterYear').value;
+            const emp = $('#filterEmp').value.trim();
+            const name = $('#filterName').value.trim();
+            const desig = $('#filterDesig').value.trim();
+            const location = $('#filterLocation').value.trim();
+
+            $('#matrixBody').innerHTML = '<tr><td class="text-center">Loading Matrix...</td></tr>';
+            $('#musterStats').style.display = 'none';
+            let url = `/api/attendance/muster-matrix?month=${month}&year=${year}`;
+            if (emp) url += `&employee_id=${encodeURIComponent(emp)}`;
+            if (name) url += `&name=${encodeURIComponent(name)}`;
+            if (desig) url += `&designation=${encodeURIComponent(desig)}`;
+            if (location) url += `&location=${encodeURIComponent(location)}`;
+            const data = await API.get(url);
+            if (!data) return;
+
+            // Render Header
+            let headHtml = `<tr><th rowspan="2">ID</th><th rowspan="2">Name</th>`;
+            headHtml += `<th colspan="${data.days.length}" class="text-center">Days</th>`;
+            headHtml += `<th colspan="5" class="text-center">Summary</th></tr><tr>`;
+            data.days.forEach(d => headHtml += `<th style="width:30px;padding:2px;">${d}</th>`);
+            headHtml += `<th>P</th><th>A</th><th>PL</th><th>WO</th><th>OT</th></tr>`;
+            $('#matrixHead').innerHTML = headHtml;
+
+            // Render Body
+            const statusMap = { 'P': 'success', 'A': 'danger', 'WO': 'info', 'PL': 'warning', 'I': 'danger' };
+
+            $('#matrixBody').innerHTML = data.staff_data.map(s => `
+                <tr>
+                    <td><strong>${s.employee_id}</strong></td>
+                    <td style="white-space:nowrap;">${s.name}</td>
+                    ${data.days.map(d => {
+                const val = s.days[d];
+                const cls = statusMap[val] || '';
+                return `<td class="text-center" style="padding:2px; font-size:0.75rem; background: ${cls ? 'var(--' + cls + '-light)' : 'transparent'};">
+                            ${val === '-' ? '' : val}
+                        </td>`;
+            }).join('')}
+                    <td class="text-center text-success"><strong>${s.summary.P}</strong></td>
+                    <td class="text-center text-danger">${s.summary.A}</td>
+                    <td class="text-center text-warning">${s.summary.PL}</td>
+                    <td class="text-center text-info">${s.summary.WO}</td>
+                    <td class="text-center" style="white-space:nowrap;">${s.summary["Total OT"]}</td>
+                </tr>
+            `).join('');
+        }
+
+        function openEditModal(id, empId, name, date) {
+            editRecordId = id;
+            $('#editInfo').textContent = `${name} (${empId}) - ${date}`;
+            $('#editPunchIn').value = '';
+            $('#editPunchOut').value = '';
+            $('#editStatus').value = '';
+            $('#editReason').value = '';
+            $('#editResult').innerHTML = '';
+            $('#editModal').classList.add('active');
+        }
+
+        function closeModal(id) { $(`#${id}`).classList.remove('active'); }
+
+        async function saveEdit() {
+            const reason = $('#editReason').value.trim();
+            if (!reason) {
+                $('#editResult').innerHTML = '<div class="alert alert-danger">Reason is required</div>';
+                return;
+            }
+
+            const body = { edit_reason: reason };
+            const pIn = $('#editPunchIn').value;
+            const pOut = $('#editPunchOut').value;
+            const status = $('#editStatus').value;
+            if (pIn) body.punch_in_time = pIn;
+            if (pOut) body.punch_out_time = pOut;
+            if (status) body.status = status;
+
+            const res = await API.put(`/api/attendance/record/${editRecordId}`, body);
+            if (res.detail) {
+                $('#editResult').innerHTML = `<div class="alert alert-danger">${res.detail}</div>`;
+            } else {
+                $('#editResult').innerHTML = `<div class="alert alert-success">${res.message}</div>`;
+                setTimeout(() => { closeModal('editModal'); loadMuster(); }, 1500);
+            }
+        }
+
+        function exportExcel() {
+            const month = $('#filterMonth').value;
+            const year = $('#filterYear').value;
+            const emp = $('#filterEmp').value.trim();
+            const name = $('#filterName').value.trim();
+            const desig = $('#filterDesig').value.trim();
+            const location = $('#filterLocation').value.trim();
+            let url = `/api/attendance/export/muster?month=${month}&year=${year}`;
+            if (emp) url += `&employee_id=${encodeURIComponent(emp)}`;
+            if (name) url += `&name=${encodeURIComponent(name)}`;
+            if (desig) url += `&designation=${encodeURIComponent(desig)}`;
+            if (location) url += `&location=${encodeURIComponent(location)}`;
+            window.open(url, '_blank');
+        }
+
+        function exportIndividual(employeeId) {
+            const month = $('#filterMonth').value;
+            const year = $('#filterYear').value;
+            const location = $('#filterLocation').value.trim();
+            let url = `/api/attendance/export/individual?month=${month}&year=${year}&employee_id=${encodeURIComponent(employeeId)}`;
+            if (location) url += `&location=${encodeURIComponent(location)}`;
+            window.open(url, '_blank');
+        }
+
+        // Auto-load if params exist
+        if (urlParams.has('employee_id')) {
+            setView('list');
+        } else {
+            setView('matrix');
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Management - Face Attendance</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <div class="app-shell">
+        <nav class="sidebar">
+            <div class="sidebar-brand">
+                <h2>Face Attendance</h2>
+                <small>Shift: 7 AM – 4 PM</small>
+            </div>
+            <div class="sidebar-nav">
+                <a href="/dashboard"><span class="icon">📊</span> Dashboard</a>
+                <a href="/punch"><span class="icon">📷</span> Punch Kiosk</a>
+                <a href="/staff"><span class="icon">👥</span> Staff</a>
+                <a href="/muster"><span class="icon">📘</span> Muster Book</a>
+            </div>
+            <div style="position:absolute;bottom:1rem;left:0;right:0;padding:0 1.25rem;">
+                <a href="#" onclick="API.logout()" style="color:#f87171;font-size:0.85rem;text-decoration:none;">↩
+                    Logout</a>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <div class="page-header flex justify-between items-center">
+                <div>
+                    <h1>Staff Management</h1>
+                    <p>Add, edit, and register faces for staff members</p>
+                </div>
+                <div class="flex gap-1">
+                    <button class="btn btn-primary" onclick="showAddModal()">+ Add Staff</button>
+                    <button class="btn btn-outline" onclick="showBulkModal()">📤 Bulk Upload</button>
+                </div>
+            </div>
+
+            <div id="alertArea"></div>
+
+            <!-- Staff Table -->
+            <div class="card">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Emp ID</th>
+                                <th>Name</th>
+                                <th>Designation</th>
+                                <th>Phone</th>
+                                <th>Shift</th>
+                                <th>Weekly Off</th>
+                                <th>Location</th>
+                                <th>Face</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staffTable">
+                            <tr>
+                                <td colspan="9" class="text-center text-muted">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add Staff Modal -->
+    <div class="modal-overlay" id="addModal">
+        <div class="modal">
+            <h3>Add New Staff</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Employee ID *</label>
+                    <input type="text" id="addEmpId" class="form-control" placeholder="e.g. HK001">
+                </div>
+                <div class="form-group">
+                    <label>Full Name *</label>
+                    <input type="text" id="addName" class="form-control" placeholder="e.g. Raj Kumar">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Designation</label>
+                    <input type="text" id="addDesig" class="form-control" placeholder="e.g. Housekeeping">
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="text" id="addPhone" class="form-control" placeholder="e.g. 9876543210">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Shift Start</label>
+                    <input type="time" id="addShiftStart" class="form-control" value="07:00">
+                </div>
+                <div class="form-group">
+                    <label>Shift End</label>
+                    <input type="time" id="addShiftEnd" class="form-control" value="16:00">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Weekly Off</label>
+                <select id="addWeeklyOff" class="form-control">
+                    <option>Sunday</option>
+                    <option>Monday</option>
+                    <option>Tuesday</option>
+                    <option>Wednesday</option>
+                    <option>Thursday</option>
+                    <option>Friday</option>
+                    <option>Saturday</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Location</label>
+                <select id="addLocation" class="form-control">
+                    <option value="">Select</option>
+                    <option>Juhu</option>
+                    <option>Kharghar</option>
+                </select>
+            </div>
+            <div class="flex gap-1 mt-2">
+                <button class="btn btn-primary" onclick="addStaff()">Add Staff</button>
+                <button class="btn btn-outline" onclick="closeModal('addModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Upload Modal -->
+    <div class="modal-overlay" id="bulkModal">
+        <div class="modal">
+            <h3>Bulk Upload Staff</h3>
+            <p class="text-muted mb-2" style="font-size:0.85rem;">
+                Upload CSV with columns: <strong>employee_id, name, designation, phone</strong>
+            </p>
+            <div class="form-group">
+                <input type="file" id="bulkFile" accept=".csv" class="form-control">
+            </div>
+            <div id="bulkResult"></div>
+            <div class="flex gap-1 mt-2">
+                <button class="btn btn-primary" onclick="bulkUpload()">Upload</button>
+                <button class="btn btn-outline" onclick="closeModal('bulkModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Staff Modal -->
+    <div class="modal-overlay" id="editStaffModal">
+        <div class="modal">
+            <h3>Edit Staff - <span id="editStaffId"></span></h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Full Name *</label>
+                    <input type="text" id="editName" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Designation</label>
+                    <input type="text" id="editDesig" class="form-control">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="text" id="editPhone" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Weekly Off</label>
+                    <select id="editWeeklyOff" class="form-control">
+                        <option>Sunday</option>
+                        <option>Monday</option>
+                        <option>Tuesday</option>
+                        <option>Wednesday</option>
+                        <option>Thursday</option>
+                        <option>Friday</option>
+                        <option>Saturday</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Shift Start</label>
+                    <input type="time" id="editShiftStart" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Shift End</label>
+                    <input type="time" id="editShiftEnd" class="form-control">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Location</label>
+                <select id="editLocation" class="form-control">
+                    <option value="">Select</option>
+                    <option>Juhu</option>
+                    <option>Kharghar</option>
+                </select>
+            </div>
+            <div id="editStaffResult"></div>
+            <div class="flex gap-1 mt-2">
+                <button class="btn btn-primary" onclick="saveStaffEdit()">Save Changes</button>
+                <button class="btn btn-outline" onclick="closeModal('editStaffModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Face Registration Modal -->
+    <div class="modal-overlay" id="faceModal">
+        <div class="modal" style="max-width:600px;">
+            <h3>Register Face - <span id="faceEmpName"></span></h3>
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">Capture 3 photos for better recognition
+                accuracy</p>
+
+            <div
+                style="position:relative;background:#000;border-radius:8px;overflow:hidden;margin-bottom:1rem;aspect-ratio:4/3;">
+                <video id="faceVideo" autoplay playsinline
+                    style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);"></video>
+                <canvas id="faceCanvas" style="display:none;"></canvas>
+            </div>
+
+            <!-- Photo Previews -->
+            <div style="display:flex;gap:0.5rem;margin-bottom:1rem;justify-content:center;">
+                <div class="photo-slot" id="photo1"
+                    style="width:100px;height:75px;background:#1e293b;border-radius:6px;display:flex;align-items:center;justify-content:center;border:2px dashed #475569;">
+                    <span style="color:#64748b;font-size:0.75rem;">Photo 1</span>
+                </div>
+                <div class="photo-slot" id="photo2"
+                    style="width:100px;height:75px;background:#1e293b;border-radius:6px;display:flex;align-items:center;justify-content:center;border:2px dashed #475569;">
+                    <span style="color:#64748b;font-size:0.75rem;">Photo 2</span>
+                </div>
+                <div class="photo-slot" id="photo3"
+                    style="width:100px;height:75px;background:#1e293b;border-radius:6px;display:flex;align-items:center;justify-content:center;border:2px dashed #475569;">
+                    <span style="color:#64748b;font-size:0.75rem;">Photo 3</span>
+                </div>
+            </div>
+
+            <div id="captureProgress" style="text-align:center;margin-bottom:0.5rem;color:#94a3b8;font-size:0.9rem;">
+                <span id="capturedCount">0</span> of 3 photos captured
+            </div>
+
+            <div id="faceResult"></div>
+            <div class="flex gap-1" style="justify-content:center;">
+                <button class="btn btn-primary" onclick="capturePhoto()" id="captureBtn">📸 Capture Photo</button>
+                <button class="btn btn-success" onclick="registerAllPhotos()" id="registerBtn" disabled>✓ Register
+                    Face</button>
+                <button class="btn btn-outline" onclick="resetPhotos()" id="resetBtn" style="display:none;">🔄 Retake
+                    All</button>
+                <button class="btn btn-outline" onclick="closeFaceModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        if (!API.isLoggedIn()) window.location.href = '/login';
+
+        let currentFaceEmpId = null;
+        let faceStream = null;
+        let capturedPhotos = [];
+
+        async function loadStaff() {
+            const staff = await API.get('/api/staff/?active_only=false');
+            if (!staff) return;
+
+            const tbody = $('#staffTable');
+            if (staff.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No staff added yet</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = staff.map(s => {
+                const safeName = s.name.replace(/'/g, "\\'");
+                const safeDesig = (s.designation || '').replace(/'/g, "\\'");
+                const safePhone = (s.phone || '').replace(/'/g, "\\'");
+                return `
+                <tr style="${!s.is_active ? 'opacity:0.5' : ''}">
+                    <td><strong>${s.employee_id}</strong></td>
+                    <td>${s.name}</td>
+                    <td>${s.designation || '-'}</td>
+                    <td>${s.phone || '-'}</td>
+                    <td>${s.shift_start} - ${s.shift_end}</td>
+                    <td>${s.weekly_off}</td>
+                    <td>${s.location || '-'}</td>
+                    <td>
+                        ${s.has_face
+                        ? '<span class="badge badge-success">✓ Registered</span>'
+                        : '<span class="badge badge-warning">Not Set</span>'}
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline" onclick="openEditStaffModal('${s.employee_id}', '${safeName}', '${safeDesig}', '${safePhone}', '${s.shift_start}', '${s.shift_end}', '${s.weekly_off}', '${s.location || ''}')" title="Edit Details">✏️</button>
+                        <button class="btn btn-sm btn-primary" onclick="openFaceModal('${s.employee_id}', '${safeName}')" title="Register Face">📷</button>
+                        <button class="btn btn-sm btn-outline" onclick="window.location.href='/muster?employee_id=${s.employee_id}'" title="View Attendance">📅</button>
+                        <button class="btn btn-sm ${s.is_active ? 'btn-outline' : 'btn-success'}" onclick="toggleStaff('${s.employee_id}', ${s.is_active})" title="${s.is_active ? 'Deactivate' : 'Activate'}">
+                            ${s.is_active ? '✕' : '✓'}
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="removeStaff('${s.employee_id}')" style="margin-left:2px;" title="Remove Permanently">🗑️</button>
+                    </td>
+                </tr>
+            `}).join('');
+        }
+
+        function showAddModal() { $('#addModal').classList.add('active'); }
+        function showBulkModal() { $('#bulkModal').classList.add('active'); }
+        function closeModal(id) { $(`#${id}`).classList.remove('active'); }
+
+        async function addStaff() {
+            const data = {
+                employee_id: $('#addEmpId').value.trim(),
+                name: $('#addName').value.trim(),
+                designation: $('#addDesig').value.trim() || null,
+                phone: $('#addPhone').value.trim() || null,
+                location: $('#addLocation').value || null,
+                shift_start: $('#addShiftStart').value || '07:00',
+                shift_end: $('#addShiftEnd').value || '16:00',
+                weekly_off: $('#addWeeklyOff').value,
+            };
+            if (!data.employee_id || !data.name) {
+                showAlert($('#alertArea'), 'Employee ID and Name are required', 'danger');
+                return;
+            }
+            const res = await API.post('/api/staff/', data);
+            if (res.detail) {
+                showAlert($('#alertArea'), res.detail, 'danger');
+            } else {
+                showAlert($('#alertArea'), res.message, 'success');
+                closeModal('addModal');
+                // Clear form
+                $('#addEmpId').value = '';
+                $('#addName').value = '';
+                $('#addDesig').value = '';
+                $('#addPhone').value = '';
+                loadStaff();
+            }
+        }
+
+        async function bulkUpload() {
+            const file = $('#bulkFile').files[0];
+            if (!file) { $('#bulkResult').innerHTML = '<div class="alert alert-danger">Select a CSV file</div>'; return; }
+            const fd = new FormData();
+            fd.append('file', file);
+            const res = await API.postForm('/api/staff/bulk-upload', fd);
+            if (res.total !== undefined) {
+                let html = `<div class="alert alert-info">Total: ${res.total} | ✓ Success: ${res.success} | ✕ Failed: ${res.failed}</div>`;
+                if (res.errors.length) {
+                    html += '<div style="font-size:0.8rem;color:#dc2626;max-height:150px;overflow:auto;margin-top:0.5rem;">'
+                        + res.errors.map(e => `<div>${e}</div>`).join('') + '</div>';
+                }
+                $('#bulkResult').innerHTML = html;
+                loadStaff();
+            }
+        }
+
+        async function openFaceModal(empId, name) {
+            currentFaceEmpId = empId;
+            capturedPhotos = [];
+            $('#faceEmpName').textContent = `${name} (${empId})`;
+            $('#faceResult').innerHTML = '';
+            $('#faceModal').classList.add('active');
+
+            // Reset UI
+            resetPhotoSlots();
+            $('#capturedCount').textContent = '0';
+            $('#captureBtn').disabled = false;
+            $('#registerBtn').disabled = true;
+            $('#resetBtn').style.display = 'none';
+
+            try {
+                faceStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: 640, height: 480 }
+                });
+                $('#faceVideo').srcObject = faceStream;
+            } catch (e) {
+                $('#faceResult').innerHTML = `<div class="alert alert-danger">Camera error: ${e.message}</div>`;
+            }
+        }
+
+        function closeFaceModal() {
+            if (faceStream) {
+                faceStream.getTracks().forEach(t => t.stop());
+                faceStream = null;
+            }
+            capturedPhotos = [];
+            closeModal('faceModal');
+        }
+
+        function resetPhotoSlots() {
+            for (let i = 1; i <= 3; i++) {
+                const slot = $(`#photo${i}`);
+                slot.innerHTML = `<span style="color:#64748b;font-size:0.75rem;">Photo ${i}</span>`;
+                slot.style.border = '2px dashed #475569';
+            }
+        }
+
+        function resetPhotos() {
+            capturedPhotos = [];
+            resetPhotoSlots();
+            $('#capturedCount').textContent = '0';
+            $('#captureBtn').disabled = false;
+            $('#registerBtn').disabled = true;
+            $('#resetBtn').style.display = 'none';
+            $('#faceResult').innerHTML = '';
+        }
+
+        function capturePhoto() {
+            if (capturedPhotos.length >= 3) return;
+
+            const video = $('#faceVideo');
+            const canvas = $('#faceCanvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+
+            canvas.toBlob((blob) => {
+                const photoNum = capturedPhotos.length + 1;
+                capturedPhotos.push(blob);
+
+                // Update preview
+                const slot = $(`#photo${photoNum}`);
+                const imgUrl = URL.createObjectURL(blob);
+                slot.innerHTML = `<img src="${imgUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:4px;">`;
+                slot.style.border = '2px solid #22c55e';
+
+                $('#capturedCount').textContent = capturedPhotos.length;
+
+                if (capturedPhotos.length >= 3) {
+                    $('#captureBtn').disabled = true;
+                    $('#registerBtn').disabled = false;
+                    $('#resetBtn').style.display = '';
+                    $('#faceResult').innerHTML = '<div class="alert alert-info">3 photos captured. Click "Register Face" to proceed.</div>';
+                }
+            }, 'image/jpeg', 0.9);
+        }
+
+        async function registerAllPhotos() {
+            if (capturedPhotos.length < 3) {
+                $('#faceResult').innerHTML = '<div class="alert alert-danger">Please capture 3 photos first</div>';
+                return;
+            }
+
+            $('#faceResult').innerHTML = '<div class="alert alert-info">Processing 3 photos and averaging embeddings...</div>';
+            $('#registerBtn').disabled = true;
+
+            // Send all 3 photos — backend averages the embeddings for better accuracy
+            const fd = new FormData();
+            fd.append('face_image', capturedPhotos[0], 'face1.jpg');
+            fd.append('face_image_2', capturedPhotos[1], 'face2.jpg');
+            fd.append('face_image_3', capturedPhotos[2], 'face3.jpg');
+
+            const res = await API.postForm(`/api/staff/${currentFaceEmpId}/register-face`, fd);
+            if (res.detail) {
+                $('#faceResult').innerHTML = `<div class="alert alert-danger">${res.detail}</div>`;
+                $('#registerBtn').disabled = false;
+            } else {
+                $('#faceResult').innerHTML = `<div class="alert alert-success">${res.message}</div>`;
+                setTimeout(() => { closeFaceModal(); loadStaff(); }, 2000);
+            }
+        }
+
+
+        async function toggleStaff(empId, currentlyActive) {
+            const action = currentlyActive ? 'Deactivate' : 'Activate';
+            if (!confirm(`${action} staff ${empId}?`)) return;
+            const res = await API.post(`/api/staff/${empId}/toggle`);
+            showAlert($('#alertArea'), res.message || res.detail, res.detail ? 'danger' : 'success');
+            loadStaff();
+        }
+
+        async function removeStaff(empId) {
+            if (!confirm(`CRITICAL: This will permanently remove staff ${empId} and all their face data. This cannot be undone. \n\nAre you absolutely sure?`)) return;
+
+            try {
+                const res = await API.delete(`/api/staff/${empId}`);
+                if (res && res.detail) {
+                    showAlert($('#alertArea'), `Error: ${res.detail}`, 'danger');
+                } else if (res && res.message) {
+                    showAlert($('#alertArea'), res.message, 'success');
+                    loadStaff();
+                } else {
+                    showAlert($('#alertArea'), 'Staff removed effectively (no message returned)', 'success');
+                    loadStaff();
+                }
+            } catch (err) {
+                showAlert($('#alertArea'), `Network/System Error: ${err.message}`, 'danger');
+            }
+        }
+
+        // Edit Staff Functions
+        let editingEmpId = null;
+
+        function openEditStaffModal(empId, name, designation, phone, shiftStart, shiftEnd, weeklyOff, location) {
+            editingEmpId = empId;
+            $('#editStaffId').textContent = empId;
+            $('#editName').value = name;
+            $('#editDesig').value = designation;
+            $('#editPhone').value = phone;
+            $('#editShiftStart').value = shiftStart;
+            $('#editShiftEnd').value = shiftEnd;
+            $('#editWeeklyOff').value = weeklyOff;
+            $('#editLocation').value = location || '';
+            $('#editStaffResult').innerHTML = '';
+            $('#editStaffModal').classList.add('active');
+        }
+
+        async function saveStaffEdit() {
+            const data = {
+                name: $('#editName').value.trim(),
+                designation: $('#editDesig').value.trim() || null,
+                phone: $('#editPhone').value.trim() || null,
+                location: $('#editLocation').value || null,
+                shift_start: $('#editShiftStart').value,
+                shift_end: $('#editShiftEnd').value,
+                weekly_off: $('#editWeeklyOff').value,
+            };
+
+            if (!data.name) {
+                $('#editStaffResult').innerHTML = '<div class="alert alert-danger">Name is required</div>';
+                return;
+            }
+
+            const res = await API.put(`/api/staff/${editingEmpId}`, data);
+            if (res.detail) {
+                $('#editStaffResult').innerHTML = `<div class="alert alert-danger">${res.detail}</div>`;
+            } else {
+                $('#editStaffResult').innerHTML = `<div class="alert alert-success">${res.message}</div>`;
+                setTimeout(() => { closeModal('editStaffModal'); loadStaff(); }, 1500);
+            }
+        }
+
+        loadStaff();
+    </script>
+</body>
+
+</html>
