@@ -140,6 +140,9 @@
                     <div class="form-group" style="margin:0;padding-top:1.3rem;">
                         <button class="btn btn-success" onclick="exportExcel()">📥 Export Matrix</button>
                     </div>
+                    <div class="form-group" style="margin:0;padding-top:1.3rem;">
+                        <button class="btn btn-outline" onclick="exportBulkIndividual()">📥 Export All (ZIP)</button>
+                    </div>
                 </div>
             </div>
 
@@ -437,6 +440,21 @@
             const year = $('#filterYear').value;
             const location = $('#filterLocation').value.trim();
             let url = `/api/attendance/export/individual?month=${month}&year=${year}&employee_id=${encodeURIComponent(employeeId)}`;
+            if (location) url += `&location=${encodeURIComponent(location)}`;
+            window.open(url, '_blank');
+        }
+
+        function exportBulkIndividual() {
+            const month = $('#filterMonth').value;
+            const year = $('#filterYear').value;
+            const emp = $('#filterEmp').value.trim();
+            const name = $('#filterName').value.trim();
+            const desig = $('#filterDesig').value.trim();
+            const location = $('#filterLocation').value.trim();
+            let url = `/api/attendance/export/bulk-individual?month=${month}&year=${year}`;
+            if (emp) url += `&employee_id=${encodeURIComponent(emp)}`;
+            if (name) url += `&name=${encodeURIComponent(name)}`;
+            if (desig) url += `&designation=${encodeURIComponent(desig)}`;
             if (location) url += `&location=${encodeURIComponent(location)}`;
             window.open(url, '_blank');
         }

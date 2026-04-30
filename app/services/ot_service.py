@@ -20,8 +20,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 # ── Configurable thresholds ──────────────────────────────────
-GRACE_PERIOD_MINUTES = 30   # Minutes after shift end that don't count as OT
-OT_MINIMUM_MINUTES = 60     # OT below this threshold is zeroed out
+GRACE_PERIOD_MINUTES = 0    # Let OT_MINIMUM_MINUTES handle the threshold
+OT_MINIMUM_MINUTES = 30     # OT below 30 min is zeroed out
 
 
 def parse_time(t_str: str) -> time:
@@ -227,6 +227,10 @@ def determine_status(
 
     # For night/cross-midnight shifts, expected duration uses shift window
     expected_minutes = get_shift_duration_minutes(shift_start_str, shift_end_str)
+
+    # If worked at least 8 hours 30 minutes, it's a full day regardless of shift duration
+    if regular_minutes >= 510:
+        return "Present"
 
     # If worked less than half the shift, mark as partial
     if regular_minutes < expected_minutes * 0.5:

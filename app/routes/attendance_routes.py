@@ -320,106 +320,15 @@ def export_individual_attendance(
     db: Session = Depends(get_db),
 ):
     """Export a single staff member's full monthly attendance as Excel."""
-    try:
-        import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    except ImportError:
-        raise HTTPException(status_code=500, detail="openpyxl not installed")
-
     staff = db.query(Staff).filter(Staff.employee_id == employee_id).first()
     if not staff:
         raise HTTPException(status_code=404, detail=f"Employee '{employee_id}' not found")
 
-    from app.services.attendance_service import get_muster_book
+    from app.services.attendance_service import get_muster_book, generate_individual_report_excel
     records = get_muster_book(db, year, month, employee_id=employee_id)
-
-    month_label = datetime(year, month, 1).strftime("%B %Y")
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = employee_id
-
-    hdr_font = Font(bold=True, color="FFFFFF")
-    hdr_fill = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
-    sum_fill = PatternFill(start_color="EBF5FB", end_color="EBF5FB", fill_type="solid")
-    thin = Border(left=Side(style="thin"), right=Side(style="thin"),
-                  top=Side(style="thin"), bottom=Side(style="thin"))
-    status_colors = {"Present": "D5F5E3", "Absent": "FADBD8",
-                     "Partial": "FEF9E7", "Weekly Off": "EBEDEF"}
-    center = Alignment(horizontal="center", vertical="center")
-
-    ws.merge_cells("A1:J1")
-    ws["A1"] = f"MONTHLY ATTENDANCE — {month_label.upper()}"
-    ws["A1"].font = Font(bold=True, size=14)
-    ws["A1"].alignment = center
-
-    ws.merge_cells("A2:J2")
-    ws["A2"] = (
-        f"Employee: {staff.name}  ({staff.employee_id})   "
-        f"Designation: {staff.designation or '—'}   "
-        f"Shift: {staff.shift_start or '07:00'} – {staff.shift_end or '16:00'}   "
-        f"Weekly Off: {staff.weekly_off or 'Sunday'}"
-    )
-    ws["A2"].font = Font(size=10, italic=True)
-    ws["A2"].alignment = Alignment(horizontal="left")
-
-    headers = ["Date", "Day", "Punch In", "Punch Out",
-               "Total Hours", "Regular Hours", "OT Hours", "OT Minutes", "Status", "Edited"]
-    col_widths = [14, 11, 12, 12, 13, 14, 10, 12, 13, 8]
-    for col, (h, w) in enumerate(zip(headers, col_widths), 1):
-        cell = ws.cell(row=4, column=col, value=h)
-        cell.font = hdr_font
-        cell.fill = hdr_fill
-        cell.alignment = center
-        cell.border = thin
-        ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = w
-
-    totals = {"ot_min": 0, "present": 0, "absent": 0, "partial": 0, "wo": 0}
-    last_data_row = 4
-    for r_idx, r in enumerate(records, 5):
-        last_data_row = r_idx
-        try:
-            day_name = datetime.strptime(r["date"], "%Y-%m-%d").strftime("%A")
-        except Exception:
-            day_name = ""
-        status = r["status"]
-        ot_min = r.get("ot_minutes", 0)
-        row_data = [
-            r["date"], day_name,
-            r["punch_in"] if r["punch_in"] != "-" else "",
-            r["punch_out"] if r["punch_out"] != "-" else "",
-            r["total_hours"], r["regular_hours"], r["ot_hours"], ot_min,
-            status, "Yes" if r["is_edited"] else "",
-        ]
-        fill_color = status_colors.get(status, "FFFFFF")
-        row_fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
-        for col, val in enumerate(row_data, 1):
-            cell = ws.cell(row=r_idx, column=col, value=val)
-            cell.border = thin
-            cell.alignment = center
-            cell.fill = row_fill
-        totals["ot_min"] += ot_min
-        if status == "Present":      totals["present"] += 1
-        elif status == "Absent":     totals["absent"] += 1
-        elif status == "Partial":    totals["partial"] += 1
-        elif status == "Weekly Off": totals["wo"] += 1
-
-    summary_row = last_data_row + 2
-    total_ot_h, total_ot_m = divmod(totals["ot_min"], 60)
-    summary_vals = ["SUMMARY", "",
-                    f"Present: {totals['present']}", f"Absent: {totals['absent']}",
-                    f"Partial: {totals['partial']}", f"Weekly Off: {totals['wo']}",
-                    f"Total OT: {total_ot_h}h {total_ot_m}m", totals["ot_min"], "", ""]
-    for col, val in enumerate(summary_vals, 1):
-        cell = ws.cell(row=summary_row, column=col, value=val)
-        cell.font = Font(bold=True)
-        cell.fill = sum_fill
-        cell.border = thin
-        cell.alignment = center
-
-    ws.freeze_panes = "A5"
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
+    
+    buf = generate_individual_report_excel(staff, records, year, month)
+    
     filename = f"attendance_{employee_id}_{year}_{month:02d}.xlsx"
     return StreamingResponse(
         buf,
@@ -428,7 +337,58 @@ def export_individual_attendance(
     )
 
 
+@router.get("/export/bulk-individual")
+def export_bulk_individual(
+    month: int = Query(..., ge=1, le=12),
+    year: int = Query(..., ge=2020),
+    employee_id: Optional[str] = None,
+    name: Optional[str] = None,
+    designation: Optional[str] = None,
+    location: Optional[str] = None,
+    db: Session = Depends(get_db),
+    user=Depends(require_role("admin", "supervisor")),
+):
+    """Export individual reports for all matched staff as a ZIP of Excel files."""
+    import zipfile
+    import io
+    from app.services.attendance_service import get_muster_book, generate_individual_report_excel
+    
+    # Get staff list based on filters
+    query = db.query(Staff).filter(Staff.is_active == True)
+    if employee_id:
+        query = query.filter(Staff.employee_id == employee_id)
+    if name:
+        query = query.filter(Staff.name.ilike(f"%{name}%"))
+    if designation:
+        query = query.filter(Staff.designation.ilike(f"%{designation}%"))
+    if location:
+        query = query.filter(Staff.location.ilike(f"%{location}%"))
+    
+    staff_list = query.all()
+    if not staff_list:
+        raise HTTPException(status_code=404, detail="No staff members found matching filters")
+
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for staff in staff_list:
+            records = get_muster_book(db, year, month, employee_id=staff.employee_id)
+            if not records: continue
+            
+            excel_buf = generate_individual_report_excel(staff, records, year, month)
+            filename = f"attendance_{staff.employee_id}_{year}_{month:02d}.xlsx"
+            zf.writestr(filename, excel_buf.getvalue())
+
+    zip_buf.seek(0)
+    zip_filename = f"bulk_attendance_{year}_{month:02d}.zip"
+    return StreamingResponse(
+        zip_buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
+    )
+
+
 @router.get("/punches")
+
 def get_punches(
     date_str: Optional[str] = None,
     employee_id: Optional[str] = None,
