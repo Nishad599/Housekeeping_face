@@ -1,10 +1,13 @@
 """
 Authentication API routes.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from app.limiter import limiter
 
 from app.database import get_db
+from app.config import settings
 from app.schemas import LoginRequest, TokenResponse, UserCreate
 from app.models.user import User, UserRole
 from app.auth.auth_service import (
@@ -14,8 +17,9 @@ from app.auth.auth_service import (
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-@router.post("/login", response_model=TokenResponse)
-def login(req: LoginRequest, db: Session = Depends(get_db)):
+@router.post("/login")
+@limiter.limit("5/minute")
+def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == req.username).first()
     if not user or not verify_password(req.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -23,11 +27,30 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Account deactivated")
 
     token = create_token({"sub": user.username, "role": user.role})
-    return TokenResponse(
-        access_token=token,
-        role=user.role,
-        full_name=user.full_name,
+
+    response = JSONResponse(content={
+        "access_token": token,
+        "token_type": "bearer",
+        "role": user.role,
+        "full_name": user.full_name,
+    })
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+        samesite="lax",
     )
+    return response
+
+
+@router.post("/logout")
+def logout():
+    """Clear the session cookie."""
+    response = JSONResponse(content={"message": "Logged out"})
+    response.delete_cookie(key="access_token", path="/")
+    return response
 
 
 @router.post("/register")

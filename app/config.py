@@ -50,6 +50,7 @@ class Settings:
     FACE_MATCH_THRESHOLD: float = float(os.getenv("FACE_MATCH_THRESHOLD", "0.45"))
     ANTISPOOF_THRESHOLD: float = float(os.getenv("ANTISPOOF_THRESHOLD", "0.7"))
     LIVENESS_ENABLED: bool = os.getenv("LIVENESS_ENABLED", "true").lower() == "true"
+    ANTISPOOF_MODEL_ENABLED: bool = os.getenv("ANTISPOOF_MODEL_ENABLED", "true").lower() == "true"
     MIN_FACE_SIZE: int = int(os.getenv("MIN_FACE_SIZE", "80"))
 
     # Working Hours (7 AM to 4 PM, after 4 PM = OT)

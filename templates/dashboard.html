@@ -91,45 +91,58 @@
         </main>
     </div>
 
-    <!-- Manual Mark Attendance Modal -->
+    <!-- Bulk Manual Attendance Modal -->
     <div class="modal-overlay" id="manualMarkModal">
-        <div class="modal">
-            <h3>Manual Attendance Mark</h3>
-            <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">Mark attendance for staff without face
-                scan</p>
-            <div class="form-group">
-                <label>Select Staff *</label>
-                <select id="markStaffSelect" class="form-control">
-                    <option value="">-- Select Staff --</option>
-                </select>
+        <div class="modal" style="max-width:600px;">
+            <h3>Bulk Manual Attendance</h3>
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">Mark attendance for multiple staff at
+                once</p>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Date *</label>
+                    <input type="date" id="bulkDate" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="bulkStatus" class="form-control">
+                        <option value="Present">Present</option>
+                        <option value="Absent">Absent</option>
+                        <option value="Partial">Partial</option>
+                        <option value="Weekly Off">Weekly Off</option>
+                    </select>
+                </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>Punch In Time</label>
-                    <input type="time" id="markPunchIn" class="form-control">
+                    <input type="time" id="bulkPunchIn" class="form-control">
                 </div>
                 <div class="form-group">
                     <label>Punch Out Time</label>
-                    <input type="time" id="markPunchOut" class="form-control">
+                    <input type="time" id="bulkPunchOut" class="form-control">
                 </div>
             </div>
             <div class="form-group">
-                <label>Status</label>
-                <select id="markStatus" class="form-control">
-                    <option value="Present">Present</option>
-                    <option value="Absent">Absent</option>
-                    <option value="Partial">Partial</option>
-                    <option value="Weekly Off">Weekly Off</option>
-                </select>
-            </div>
-            <div class="form-group">
                 <label>Reason *</label>
-                <input type="text" id="markReason" class="form-control"
-                    placeholder="e.g. Forgot to punch, System issue">
+                <input type="text" id="bulkReason" class="form-control"
+                    placeholder="e.g. System down, Forgot punch, Manual entry">
             </div>
-            <div id="manualMarkResult"></div>
+
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:0.5rem;">
+                    <input type="checkbox" id="selectAllStaff"> <strong>Select All Staff</strong>
+                </label>
+                <div id="staffCheckboxList"
+                    style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.5rem;margin-top:0.5rem;">
+                    <p class="text-muted">Loading staff...</p>
+                </div>
+                <small class="text-muted" id="selectedCount">0 selected</small>
+            </div>
+
+            <div id="bulkMarkResult"></div>
             <div class="flex gap-1 mt-2">
-                <button class="btn btn-primary" onclick="submitManualMark()">Mark Attendance</button>
+                <button class="btn btn-primary" onclick="submitBulkMark()">Mark Attendance</button>
                 <button class="btn btn-outline" onclick="closeModal('manualMarkModal')">Cancel</button>
             </div>
         </div>
@@ -186,53 +199,95 @@
 
         function closeModal(id) { $(`#${id}`).classList.remove('active'); }
 
+        let _staffList = [];
+
         async function openManualMarkModal() {
             // Load staff list
             const staff = await API.get('/api/staff/');
             if (!staff) return;
+            _staffList = staff;
 
-            const select = $('#markStaffSelect');
-            select.innerHTML = '<option value="">-- Select Staff --</option>' +
-                staff.map(s => `<option value="${s.employee_id}">${s.employee_id} - ${s.name}</option>`).join('');
+            // Set date to today
+            const today = new Date().toISOString().split('T')[0];
+            $('#bulkDate').value = today;
 
             // Reset form
-            $('#markPunchIn').value = '';
-            $('#markPunchOut').value = '';
-            $('#markStatus').value = 'Present';
-            $('#markReason').value = '';
-            $('#manualMarkResult').innerHTML = '';
+            $('#bulkPunchIn').value = '';
+            $('#bulkPunchOut').value = '';
+            $('#bulkStatus').value = 'Present';
+            $('#bulkReason').value = '';
+            $('#bulkMarkResult').innerHTML = '';
+            $('#selectAllStaff').checked = false;
 
+            // Render staff checkbox list
+            const container = $('#staffCheckboxList');
+            container.innerHTML = staff.map(s => `
+                <label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0;border-bottom:1px solid var(--border);">
+                    <input type="checkbox" class="staff-cb" value="${s.employee_id}">
+                    <span><strong>${s.employee_id}</strong> — ${s.name}</span>
+                </label>
+            `).join('');
+
+            updateSelectedCount();
             $('#manualMarkModal').classList.add('active');
         }
 
-        async function submitManualMark() {
-            const empId = $('#markStaffSelect').value;
-            const reason = $('#markReason').value.trim();
+        // Select All toggle
+        document.addEventListener('change', e => {
+            if (e.target.id === 'selectAllStaff') {
+                $$('.staff-cb').forEach(cb => cb.checked = e.target.checked);
+                updateSelectedCount();
+            }
+            if (e.target.classList.contains('staff-cb')) {
+                updateSelectedCount();
+            }
+        });
 
-            if (!empId) {
-                $('#manualMarkResult').innerHTML = '<div class="alert alert-danger">Please select a staff member</div>';
+        function updateSelectedCount() {
+            const count = $$('.staff-cb:checked').length;
+            $('#selectedCount').textContent = `${count} selected`;
+        }
+
+        async function submitBulkMark() {
+            const dateVal = $('#bulkDate').value;
+            const reason = $('#bulkReason').value.trim();
+            const selected = [...$$('.staff-cb:checked')].map(cb => cb.value);
+
+            if (!dateVal) {
+                $('#bulkMarkResult').innerHTML = '<div class="alert alert-danger">Please select a date</div>';
                 return;
             }
-            if (!reason) {
-                $('#manualMarkResult').innerHTML = '<div class="alert alert-danger">Reason is required</div>';
+            if (selected.length === 0) {
+                $('#bulkMarkResult').innerHTML = '<div class="alert alert-danger">Please select at least one staff member</div>';
+                return;
+            }
+            if (!reason || reason.length < 3) {
+                $('#bulkMarkResult').innerHTML = '<div class="alert alert-danger">Reason is required (min 3 chars)</div>';
                 return;
             }
 
             const body = {
-                punch_in_time: $('#markPunchIn').value || null,
-                punch_out_time: $('#markPunchOut').value || null,
-                status: $('#markStatus').value,
+                employee_ids: selected,
+                date: dateVal,
+                punch_in_time: $('#bulkPunchIn').value || null,
+                punch_out_time: $('#bulkPunchOut').value || null,
+                status: $('#bulkStatus').value,
                 edit_reason: reason,
             };
 
-            $('#manualMarkResult').innerHTML = '<div class="alert alert-info">Processing...</div>';
+            $('#bulkMarkResult').innerHTML = '<div class="alert alert-info">Processing...</div>';
 
-            const res = await API.post(`/api/attendance/manual-mark/${empId}`, body);
+            const res = await API.post('/api/attendance/bulk-manual-mark', body);
             if (res.detail) {
-                $('#manualMarkResult').innerHTML = `<div class="alert alert-danger">${res.detail}</div>`;
+                $('#bulkMarkResult').innerHTML = `<div class="alert alert-danger">${res.detail}</div>`;
             } else {
-                $('#manualMarkResult').innerHTML = `<div class="alert alert-success">${res.message}</div>`;
-                setTimeout(() => { closeModal('manualMarkModal'); loadDashboard(); }, 1500);
+                let msg = `✅ ${res.success} of ${res.success + res.failed} marked successfully.`;
+                if (res.failed > 0) msg += `<br>❌ ${res.failed} failed: ${res.errors.join(', ')}`;
+                const alertType = res.failed > 0 ? 'warning' : 'success';
+                $('#bulkMarkResult').innerHTML = `<div class="alert alert-${alertType}">${msg}</div>`;
+                if (res.success > 0) {
+                    setTimeout(() => { closeModal('manualMarkModal'); loadDashboard(); }, 2000);
+                }
             }
         }
 

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Attendance - Face Attendance System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        .container {
+            background-color: white;
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            color: #111827;
+            margin-bottom: 0.5rem;
+        }
+
+        p.subtitle {
+            color: #6b7280;
+            font-size: 0.95rem;
+            margin-bottom: 2rem;
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+            text-align: left;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 1rem;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-group input:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #1d4ed8;
+        }
+
+        .result-card {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            border-radius: 8px;
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            display: none;
+            text-align: left;
+        }
+
+        .result-card h3 {
+            margin: 0 0 1rem 0;
+            color: #111827;
+            font-size: 1.125rem;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 0.5rem;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+            font-size: 0.95rem;
+        }
+
+        .info-label {
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        .info-value {
+            color: #111827;
+            font-weight: 600;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .status-present {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-absent {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-partial {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+
+        .error-msg {
+            color: #dc2626;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .nav-links {
+            margin-top: 1.5rem;
+            font-size: 0.85rem;
+        }
+
+        .nav-links a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>My Attendance</h1>
+        <p class="subtitle">Check your punch records for today</p>
+
+        <form id="attendanceForm">
+            <div class="input-group">
+                <label for="employeeId">Employee ID</label>
+                <input type="text" id="employeeId" required placeholder="e.g. EMP001" autocomplete="off">
+            </div>
+            <button type="submit" id="checkBtn">Check Attendance</button>
+        </form>
+
+        <div id="errorMsg" class="error-msg"></div>
+
+        <div id="resultCard" class="result-card">
+            <h3 id="resName">Staff Name</h3>
+
+            <div class="info-row">
+                <span class="info-label">Status</span>
+                <span class="info-value"><span id="resStatus" class="status-badge status-present">Present</span></span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Punch In</span>
+                <span class="info-value" id="resIn">08:00 AM</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Punch Out</span>
+                <span class="info-value" id="resOut">--:-- --</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Total Hours</span>
+                <span class="info-value" id="resTotal">0h 0m</span>
+            </div>
+        </div>
+
+        <div class="nav-links">
+            <a href="/punch">Go back to Kiosk</a>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('attendanceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('checkBtn');
+            const empId = document.getElementById('employeeId').value.trim();
+            const errDiv = document.getElementById('errorMsg');
+            const resCard = document.getElementById('resultCard');
+
+            btn.disabled = true;
+            btn.textContent = 'Checking...';
+            errDiv.style.display = 'none';
+            resCard.style.display = 'none';
+
+            try {
+                const response = await fetch(`/api/attendance/staff-today/${empId}`);
+
+                if (!response.ok) {
+                    throw new Error('Employee ID not found or server error');
+                }
+
+                const data = await response.json();
+
+                if (!data.found) {
+                    errDiv.textContent = `No attendance record found for ${data.employee_name || 'you'} today.`;
+                    errDiv.style.display = 'block';
+                } else {
+                    document.getElementById('resName').textContent = data.employee_name;
+                    document.getElementById('resIn').textContent = data.punch_in || '--:-- --';
+                    document.getElementById('resOut').textContent = data.punch_out || '--:-- --';
+                    document.getElementById('resTotal').textContent = data.total_hours;
+
+                    const statusEl = document.getElementById('resStatus');
+                    statusEl.textContent = data.status;
+                    statusEl.className = 'status-badge';
+                    if (data.status === 'Present') statusEl.classList.add('status-present');
+                    else if (data.status === 'Absent') statusEl.classList.add('status-absent');
+                    else if (data.status === 'Partial') statusEl.classList.add('status-partial');
+
+                    resCard.style.display = 'block';
+                }
+            } catch (err) {
+                errDiv.textContent = err.message;
+                errDiv.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Check Attendance';
+            }
+        });
+    </script>
+</body>
+
+</html>

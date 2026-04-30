@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.database import get_db
-from app.schemas import PunchResponse, AttendanceEditRequest
+from app.schemas import PunchResponse, AttendanceEditRequest, BulkManualMarkRequest
 from app.services.face_service import process_punch_image
 from app.services.attendance_service import (
     record_punch, edit_attendance_record, get_muster_book, log_audit
@@ -90,6 +90,37 @@ def get_today_attendance(
     ]
 
 
+@router.get("/staff-today/{employee_id}")
+def get_staff_today_attendance(
+    employee_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get today's attendance for a specific staff member (Public access)."""
+    today = date.today()
+    staff = db.query(Staff).filter(Staff.employee_id == employee_id).first()
+    
+    if not staff:
+        raise HTTPException(status_code=404, detail="Employee not found")
+        
+    rec = db.query(AttendanceRecord).filter(
+        AttendanceRecord.staff_id == staff.id,
+        AttendanceRecord.date == today
+    ).first()
+    
+    if not rec:
+        return {"found": False, "employee_name": staff.name}
+        
+    total = rec.total_work_minutes or 0
+    return {
+        "found": True,
+        "employee_name": staff.name,
+        "punch_in": rec.punch_in_time.strftime("%I:%M %p") if rec.punch_in_time else None,
+        "punch_out": rec.punch_out_time.strftime("%I:%M %p") if rec.punch_out_time else None,
+        "total_hours": f"{total // 60}h {total % 60}m",
+        "status": rec.status
+    }
+
+
 @router.get("/muster")
 def muster_book(
     month: int = Query(..., ge=1, le=12),
@@ -157,6 +188,28 @@ def manual_mark(
     if not success:
         raise HTTPException(status_code=400, detail=message)
     return {"message": message}
+
+
+@router.post("/bulk-manual-mark")
+def bulk_manual_mark(
+    req: BulkManualMarkRequest,
+    db: Session = Depends(get_db),
+    user=Depends(require_role("admin", "supervisor")),
+):
+    """Bulk mark attendance for multiple staff on a given date (admin/supervisor only)."""
+    from app.services.attendance_service import bulk_manual_mark_attendance
+    target_date = datetime.strptime(req.date, "%Y-%m-%d").date()
+    result = bulk_manual_mark_attendance(
+        db,
+        employee_ids=req.employee_ids,
+        target_date=target_date,
+        punch_in_str=req.punch_in_time,
+        punch_out_str=req.punch_out_time,
+        status=req.status,
+        reason=req.edit_reason,
+        editor=user.full_name,
+    )
+    return result
 
 
 @router.get("/export/muster")

@@ -8,12 +8,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pathlib import Path
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from app.config import settings
 from app.database import init_db, SessionLocal, get_db
 from app.auth.auth_service import init_default_admin, decode_token, require_role
 from app.models.user import User
 from app.routes import auth_routes, staff_routes, attendance_routes
 from app.scheduler import start_scheduler, stop_scheduler
+from app.limiter import limiter
 from sqlalchemy.orm import Session
 
 logging.basicConfig(
@@ -69,6 +73,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -123,6 +130,11 @@ def muster_page(request: Request, db: Session = Depends(get_db)):
 @app.get("/punch")
 def punch_page(request: Request):
     return templates.TemplateResponse("punch.html", {"request": request})
+
+
+@app.get("/my-attendance")
+def my_attendance_page(request: Request):
+    return templates.TemplateResponse("my_attendance.html", {"request": request})
 
 
 @app.get("/api/health")

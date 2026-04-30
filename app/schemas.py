@@ -90,6 +90,15 @@ class AttendanceEditRequest(BaseModel):
     edit_reason: str = Field(..., min_length=3)
 
 
+class BulkManualMarkRequest(BaseModel):
+    employee_ids: List[str]
+    date: str  # "YYYY-MM-DD"
+    punch_in_time: Optional[str] = None  # "HH:MM"
+    punch_out_time: Optional[str] = None
+    status: str = "Present"
+    edit_reason: str = Field(..., min_length=3)
+
+
 # ─── Muster Book ───────────────────────────────────
 class MusterBookQuery(BaseModel):
     month: int = Field(..., ge=1, le=12)

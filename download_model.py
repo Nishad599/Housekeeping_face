@@ -17,6 +17,10 @@ MODEL_FILE = os.path.join(MODEL_DIR, "w600k_r50.onnx")
 DET_URL = "https://huggingface.co/yolkailtd/face-swap-models/resolve/main/insightface/models/buffalo_l/det_10g.onnx"
 DET_FILE = os.path.join(MODEL_DIR, "det_10g.onnx")
 
+# MiniFASNetV2 anti-spoofing model (~1 MB)
+ANTISPOOF_URL = "https://github.com/yakhyo/face-anti-spoofing/releases/download/weights/MiniFASNetV2.onnx"
+ANTISPOOF_FILE = os.path.join(MODEL_DIR, "MiniFASNetV2.onnx")
+
 
 def download_file(url, dest, label):
     """Download with progress bar."""
@@ -57,25 +61,28 @@ def main():
 
     os.makedirs(MODEL_DIR, exist_ok=True)
 
-    print("[1/2] Face Recognition Model (w600k_r50.onnx ~174 MB)")
+    print("[1/3] Face Recognition Model (w600k_r50.onnx ~174 MB)")
     ok1 = download_file(MODEL_URL, MODEL_FILE, "w600k_r50.onnx")
 
     print()
-    print("[2/2] Face Detection Model (det_10g.onnx ~16 MB)")
+    print("[2/3] Face Detection Model (det_10g.onnx ~16 MB)")
     ok2 = download_file(DET_URL, DET_FILE, "det_10g.onnx")
 
     print()
-    if ok1 and ok2:
+    print("[3/3] Anti-Spoofing Model (MiniFASNetV2.onnx ~1 MB)")
+    ok3 = download_file(ANTISPOOF_URL, ANTISPOOF_FILE, "MiniFASNetV2.onnx")
+
+    print()
+    if ok1 and ok2 and ok3:
         print("=" * 55)
         print("  All models ready! You can now run:")
         print("  python -m uvicorn app.main:app --port 8000 --reload")
         print("=" * 55)
     else:
         print("Some models failed to download. See errors above.")
-        print("You can download them manually from HuggingFace:")
-        print("  https://huggingface.co/yolkailtd/face-swap-models/tree/main/insightface/models/buffalo_l")
+        print("You can download them manually.")
 
-    return 0 if (ok1 and ok2) else 1
+    return 0 if (ok1 and ok2 and ok3) else 1
 
 
 if __name__ == "__main__":

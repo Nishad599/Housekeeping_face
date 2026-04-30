@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Face Attendance</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
+
 <body>
     <div class="login-container">
         <div class="login-box">
@@ -37,9 +39,9 @@
     <script src="/static/js/app.js"></script>
     <script>
         // Redirect if already logged in
-        if (API.isLoggedIn() && document.cookie.includes('access_token=')) {
-    window.location.href = '/dashboard';
-}
+        if (API.isLoggedIn()) {
+            window.location.href = '/dashboard';
+        }
 
         async function doLogin() {
             const username = $('#username').value.trim();
@@ -63,4 +65,5 @@
         $('#username').addEventListener('keydown', e => { if (e.key === 'Enter') $('#password').focus(); });
     </script>
 </body>
+
 </html>

@@ -61,6 +61,7 @@ const API = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password }),
+            credentials: 'same-origin',
         });
         if (!res.ok) {
             const err = await res.json();
@@ -76,9 +77,7 @@ const API = {
         localStorage.setItem('role', data.role);
         localStorage.setItem('userName', data.full_name);
 
-        // Also save to cookie for window.open/downloads
-        document.cookie = `access_token=${data.access_token}; path=/; max-age=86400; SameSite=Lax`;
-
+        // Cookie is now set server-side as HttpOnly
         return data;
     },
 
@@ -89,10 +88,9 @@ const API = {
         localStorage.removeItem('role');
         localStorage.removeItem('userName');
 
-        // Clear cookie
-        document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC";
-
-        window.location.href = '/login';
+        // Clear HttpOnly cookie via server endpoint
+        fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+            .finally(() => { window.location.href = '/login'; });
     },
 
     isLoggedIn() {

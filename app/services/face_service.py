@@ -27,10 +27,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 MODEL_DIR = BASE_DIR / "models"
 RECOGNITION_MODEL = MODEL_DIR / "w600k_r50.onnx"
 DETECTION_MODEL = MODEL_DIR / "det_10g.onnx"
+ANTISPOOF_MODEL = MODEL_DIR / "MiniFASNetV2.onnx"
+ANTISPOOF_MODEL_URL = "https://github.com/yakhyo/face-anti-spoofing/releases/download/weights/MiniFASNetV2.onnx"
 
 # ── Global Cache ─────────────────────────────────────
 _rec_session = None        # onnxruntime recognition session
 _det_session = None        # onnxruntime detection session (optional)
+_antispoof_session = None  # onnxruntime anti-spoof session (optional)
 _face_cascade = None       # OpenCV Haar cascade (fallback detector)
 _embedding_cache: Dict[int, np.ndarray] = {}
 
@@ -83,6 +86,37 @@ def get_face_detector():
         _face_cascade = cv2.CascadeClassifier(cascade_path)
         logger.info("Using OpenCV Haar cascade face detector")
     return "haar", _face_cascade
+
+
+def get_antispoof_session():
+    """Load MiniFASNetV2.onnx anti-spoofing model. Auto-downloads if missing."""
+    global _antispoof_session
+    if _antispoof_session is not None:
+        return _antispoof_session
+
+    if not ANTISPOOF_MODEL.exists():
+        # Try auto-download
+        try:
+            import urllib.request
+            logger.info("Downloading MiniFASNetV2 anti-spoofing model...")
+            MODEL_DIR.mkdir(parents=True, exist_ok=True)
+            urllib.request.urlretrieve(ANTISPOOF_MODEL_URL, str(ANTISPOOF_MODEL))
+            logger.info("MiniFASNetV2 download complete.")
+        except Exception as e:
+            logger.warning(f"Failed to download MiniFASNetV2: {e}. Anti-spoofing model disabled.")
+            return None
+
+    try:
+        import onnxruntime as ort
+        _antispoof_session = ort.InferenceSession(
+            str(ANTISPOOF_MODEL),
+            providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+        )
+        logger.info(f"Loaded anti-spoofing model: {ANTISPOOF_MODEL.name}")
+        return _antispoof_session
+    except Exception as e:
+        logger.warning(f"Failed to load MiniFASNetV2: {e}. Anti-spoofing model disabled.")
+        return None
 
 
 # ═══════════════════════════════════════════════════════
@@ -353,18 +387,103 @@ def basic_liveness_check(image: np.ndarray) -> Tuple[bool, str]:
     return True, ""
 
 
+def _get_expanded_crop_bbox(bbox, img_w, img_h, scale=2.7):
+    """
+    Expand face bounding box by scale factor for MiniFASNet context.
+    bbox format: (x, y, w, h) — top-left corner + dimensions.
+    """
+    x, y, w, h = bbox
+    cx = x + w // 2
+    cy = y + h // 2
+    side = int(max(w, h) * scale) / 2
+    new_x1 = max(0, int(cx - side))
+    new_y1 = max(0, int(cy - side))
+    new_x2 = min(img_w, int(cx + side))
+    new_y2 = min(img_h, int(cy + side))
+    return new_x1, new_y1, new_x2, new_y2
+
+
+def minifasnet_liveness_check(
+    image: np.ndarray,
+    face_bbox: Tuple[int, int, int, int],
+    threshold: float = 0.45,
+) -> Tuple[bool, float, str]:
+    """
+    ML-based anti-spoofing using MiniFASNetV2 ONNX model.
+    - Expanded crop (2.7×) around face for background context
+    - Resizes to 80×80, BGR→RGB, NCHW format
+    - 3-class output [Spoof, Real, Spoof] — index 1 = Real score
+    Returns: (is_real, real_score, reason)
+    """
+    session = get_antispoof_session()
+    if session is None:
+        # Model not available — pass through (log warning once)
+        return True, 1.0, ""
+
+    try:
+        img_h, img_w = image.shape[:2]
+        x1, y1, x2, y2 = _get_expanded_crop_bbox(face_bbox, img_w, img_h, scale=2.7)
+        face_crop = image[y1:y2, x1:x2]
+
+        if face_crop.size == 0:
+            return False, 0.0, "Anti-spoofing: empty face crop"
+
+        # Preprocessing: resize → BGR→RGB → NCHW → float32
+        face_img = cv2.resize(face_crop, (80, 80))
+        face_img = cv2.cvtColor(face_img, cv2.COLOR_BGR2RGB)
+        input_data = np.transpose(face_img, (2, 0, 1)).astype(np.float32)
+        input_data = np.expand_dims(input_data, axis=0)  # [1, 3, 80, 80]
+
+        # Inference
+        input_name = session.get_inputs()[0].name
+        outs = session.run(None, {input_name: input_data})
+
+        # Output: [1, 3] — layout is [Spoof, Real, Spoof]
+        logits = outs[0][0]
+        exp_logits = np.exp(logits - np.max(logits))  # numerical stability
+        probs = exp_logits / np.sum(exp_logits)
+        real_score = float(probs[1])  # index 1 = "Real"
+
+        if real_score >= threshold:
+            return True, real_score, ""
+        else:
+            return False, real_score, (
+                f"Anti-spoofing failed: face appears fake "
+                f"(real_score={real_score:.3f}, threshold={threshold})"
+            )
+    except Exception as e:
+        logger.error(f"MiniFASNet anti-spoofing error: {e}")
+        # Fail closed: treat errors as spoof to be safe
+        return False, 0.0, f"Anti-spoofing error: {e}"
+
+
 def check_antispoof(
     image: np.ndarray,
     face_bbox: Tuple[int, int, int, int],
     threshold: float = 0.5
 ) -> Tuple[bool, float, str]:
     """
-    Anti-spoofing check. Delegates to basic_liveness_check.
-    Returns: (is_real, confidence, reason)
+    Combined anti-spoofing check:
+    1. basic_liveness_check() — heuristic (sharpness, glare, texture)
+    2. minifasnet_liveness_check() — ML model (if enabled and available)
+    Both must pass. Returns: (is_real, confidence, reason)
     """
+    # Step 1: Basic heuristic checks
     is_live, msg = basic_liveness_check(image)
-    confidence = 1.0 if is_live else 0.0
-    return is_live, confidence, msg
+    if not is_live:
+        return False, 0.0, msg
+
+    # Step 2: ML-based anti-spoofing (MiniFASNetV2)
+    if settings.ANTISPOOF_MODEL_ENABLED:
+        is_real, real_score, spoof_msg = minifasnet_liveness_check(
+            image, face_bbox, threshold=settings.ANTISPOOF_THRESHOLD
+        )
+        if not is_real:
+            return False, real_score, spoof_msg
+        return True, real_score, ""
+
+    # Model disabled — pass with heuristic-only confidence
+    return True, 1.0, ""
 
 
 # ═══════════════════════════════════════════════════════

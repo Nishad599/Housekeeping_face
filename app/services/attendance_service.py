@@ -474,29 +474,30 @@ def manual_mark_attendance(
     status: str,
     reason: str,
     editor: str,
+    target_date: Optional[date] = None,
 ) -> Tuple[bool, str]:
-    """Manually mark attendance for a staff member for today."""
+    """Manually mark attendance for a staff member for a given date (defaults to today)."""
     staff = db.query(Staff).filter(Staff.employee_id == employee_id).first()
     if not staff:
         return False, "Staff not found"
 
-    today = date.today()
+    mark_date = target_date or date.today()
     record = db.query(AttendanceRecord).filter(
         AttendanceRecord.staff_id == staff.id,
-        AttendanceRecord.date == today,
+        AttendanceRecord.date == mark_date,
     ).first()
 
     if record is None:
-        record = AttendanceRecord(staff_id=staff.id, date=today)
+        record = AttendanceRecord(staff_id=staff.id, date=mark_date)
         db.add(record)
 
     if punch_in_str:
         h, m = punch_in_str.split(":")
-        record.punch_in_time = datetime.combine(today, time(int(h), int(m)))
+        record.punch_in_time = datetime.combine(mark_date, time(int(h), int(m)))
     
     if punch_out_str:
         h, m = punch_out_str.split(":")
-        record.punch_out_time = datetime.combine(today, time(int(h), int(m)))
+        record.punch_out_time = datetime.combine(mark_date, time(int(h), int(m)))
 
     record.status = status
     record.is_edited = True
@@ -506,7 +507,7 @@ def manual_mark_attendance(
 
     # Calculate hours
     if record.punch_in_time and record.punch_out_time:
-        on_weekly_off = is_weekly_off(today, staff.weekly_off)
+        on_weekly_off = is_weekly_off(mark_date, staff.weekly_off)
         hours = calculate_work_hours(
             record.punch_in_time,
             record.punch_out_time,
@@ -523,8 +524,38 @@ def manual_mark_attendance(
     # Log audit
     log_audit(db, "MANUAL_MARK", "attendance", record.id, performed_by=editor, details={
         "employee_id": employee_id,
+        "date": str(mark_date),
         "status": status,
         "reason": reason
     })
     
     return True, "Attendance marked successfully"
+
+
+def bulk_manual_mark_attendance(
+    db: Session,
+    employee_ids: list,
+    target_date: date,
+    punch_in_str: Optional[str],
+    punch_out_str: Optional[str],
+    status: str,
+    reason: str,
+    editor: str,
+) -> dict:
+    """Mark attendance for multiple staff members at once. Returns summary."""
+    success = 0
+    failed = 0
+    errors = []
+
+    for emp_id in employee_ids:
+        ok, msg = manual_mark_attendance(
+            db, emp_id, punch_in_str, punch_out_str,
+            status, reason, editor, target_date=target_date,
+        )
+        if ok:
+            success += 1
+        else:
+            failed += 1
+            errors.append(f"{emp_id}: {msg}")
+
+    return {"success": success, "failed": failed, "errors": errors}
