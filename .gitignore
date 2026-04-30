@@ -32,3 +32,6 @@ Thumbs.db
 # Project specific
 sync_from_vm.bat
 project_architecture.md.resolved
+actions-runner/
+.pytest_cache/
+static/uploads/

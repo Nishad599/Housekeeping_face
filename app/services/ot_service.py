@@ -93,6 +93,15 @@ def apply_ot_minimum(ot_minutes: int) -> int:
     return ot_minutes
 
 
+def round_up_15m(dt: datetime) -> datetime:
+    """Round up datetime to next 15-minute block."""
+    if dt.minute % 15 == 0 and dt.second == 0 and dt.microsecond == 0:
+        return dt
+    discard = timedelta(seconds=dt.second, microseconds=dt.microsecond)
+    add_mins = 15 - (dt.minute % 15)
+    return dt - discard + timedelta(minutes=add_mins)
+
+
 def calculate_work_hours(
     punch_in: datetime,
     punch_out: datetime,
@@ -104,7 +113,9 @@ def calculate_work_hours(
     Calculate regular and OT minutes from punch-in/out.
 
     Logic:
-    1. Total work = punch_out - punch_in (raw minutes).
+    1. Apply 15-minute round-up to punch-in time (e.g., 06:46 -> 07:00).
+    2. Total work = punch_out - punch_in (raw minutes).
+
     2. If is_weekly_off_day → ALL time is OT; regular = 0.
        - OT minimum (60 min) still applies.
     3. Otherwise:
@@ -117,6 +128,9 @@ def calculate_work_hours(
 
     Returns dict with: total_work_minutes, regular_minutes, ot_minutes
     """
+    # Apply round up to punch-in time
+    punch_in = round_up_15m(punch_in)
+    
     if punch_out <= punch_in:
         return {"total_work_minutes": 0, "regular_minutes": 0, "ot_minutes": 0}
 
