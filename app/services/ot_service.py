@@ -138,10 +138,15 @@ def calculate_work_hours(
 
     if is_weekly_off_day:
         # Weekly-off day → every minute is OT
-        regular_minutes = 0
-        ot_rounded = round_ot_minutes(total_minutes)
+        effective_ot = total_minutes
+        # Deduct 1 hour (lunch) if working more than 8 hours on off-day
+        if total_minutes > 480:
+            effective_ot = total_minutes - 60
+        
+        ot_rounded = round_ot_minutes(effective_ot)
         # Apply OT minimum: no OT if under 1 hour
         ot_minutes = apply_ot_minimum(ot_rounded)
+        regular_minutes = 0
         logger.debug(
             f"Weekly-off punch: total={total_minutes}m → OT (raw={total_minutes}, "
             f"rounded={ot_rounded}, after minimum={ot_minutes})"
