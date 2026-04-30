@@ -422,13 +422,76 @@ def get_muster_book(
     """
     Get monthly muster book data.
     Returns list of daily records for all or specified staff.
-    Supports filtering by employee_id, name (partial), and designation (partial).
+    If employee_id is provided, returns entries for EVERY day of the month.
     """
     from calendar import monthrange
     _, last_day = monthrange(year, month)
     start_date = date(year, month, 1)
     end_date = date(year, month, last_day)
 
+    # 1. If searching for a specific individual, we want to show ALL days of the month
+    if employee_id and not (name or designation or location):
+        staff = db.query(Staff).filter(Staff.employee_id == employee_id).first()
+        if not staff:
+            return []
+            
+        # Get existing records
+        records = db.query(AttendanceRecord).filter(
+            AttendanceRecord.staff_id == staff.id,
+            AttendanceRecord.date >= start_date,
+            AttendanceRecord.date <= end_date
+        ).all()
+        
+        record_map = {r.date: r for r in records}
+        
+        results = []
+        for day in range(1, last_day + 1):
+            curr_date = date(year, month, day)
+            rec = record_map.get(curr_date)
+            
+            if rec:
+                results.append({
+                    "id": rec.id,
+                    "employee_id": staff.employee_id,
+                    "name": staff.name,
+                    "designation": staff.designation,
+                    "date": rec.date.isoformat(),
+                    "punch_in": rec.punch_in_time.strftime("%I:%M %p") if rec.punch_in_time else "-",
+                    "punch_out": rec.punch_out_time.strftime("%I:%M %p") if rec.punch_out_time else "-",
+                    "total_hours": f"{rec.total_work_minutes // 60}h {rec.total_work_minutes % 60}m",
+                    "regular_hours": f"{rec.regular_minutes // 60}h {rec.regular_minutes % 60}m",
+                    "ot_hours": f"{rec.ot_minutes // 60}h {rec.ot_minutes % 60}m",
+                    "ot_minutes": rec.ot_minutes,
+                    "status": rec.status,
+                    "is_edited": rec.is_edited,
+                })
+            else:
+                # Determine status for missing day
+                if curr_date > date.today():
+                    status = "-"
+                elif is_weekly_off(curr_date, staff.weekly_off):
+                    status = "Weekly Off"
+                else:
+                    status = "Absent"
+                    
+                results.append({
+                    "id": None,
+                    "employee_id": staff.employee_id,
+                    "name": staff.name,
+                    "designation": staff.designation,
+                    "date": curr_date.isoformat(),
+                    "punch_in": "-",
+                    "punch_out": "-",
+                    "total_hours": "0h 0m",
+                    "regular_hours": "0h 0m",
+                    "ot_hours": "0h 0m",
+                    "ot_minutes": 0,
+                    "status": status,
+                    "is_edited": False,
+                })
+        return results
+
+    # 2. General search - return only actual records
     query = db.query(AttendanceRecord, Staff).join(
         Staff, AttendanceRecord.staff_id == Staff.id
     ).filter(
@@ -446,14 +509,14 @@ def get_muster_book(
         query = query.filter(Staff.location.ilike(f"%{location}%"))
 
     query = query.order_by(Staff.employee_id, AttendanceRecord.date)
-    results = query.all()
+    records = query.all()
 
     return [
         {
             "id": rec.id,
-            "employee_id": staff.employee_id,
-            "name": staff.name,
-            "designation": staff.designation,
+            "employee_id": s.employee_id,
+            "name": s.name,
+            "designation": s.designation,
             "date": rec.date.isoformat(),
             "punch_in": rec.punch_in_time.strftime("%I:%M %p") if rec.punch_in_time else "-",
             "punch_out": rec.punch_out_time.strftime("%I:%M %p") if rec.punch_out_time else "-",
@@ -464,8 +527,9 @@ def get_muster_book(
             "status": rec.status,
             "is_edited": rec.is_edited,
         }
-        for rec, staff in results
+        for rec, s in records
     ]
+
 def manual_mark_attendance(
     db: Session,
     employee_id: str,
@@ -491,18 +555,18 @@ def manual_mark_attendance(
         record = AttendanceRecord(staff_id=staff.id, date=mark_date)
         db.add(record)
 
-    if punch_in_str:
+    if punch_in_str and punch_in_str.strip():
         h, m = punch_in_str.split(":")
         record.punch_in_time = datetime.combine(mark_date, time(int(h), int(m)))
     
-    if punch_out_str:
+    if punch_out_str and punch_out_str.strip():
         h, m = punch_out_str.split(":")
         record.punch_out_time = datetime.combine(mark_date, time(int(h), int(m)))
 
     record.status = status
     record.is_edited = True
     record.edited_by = editor
-    record.edited_at = datetime.now()
+    record.edited_at = datetime.utcnow()
     record.edit_reason = f"[Manual Mark] {reason}"
 
     # Calculate hours
