@@ -23,6 +23,7 @@ router = APIRouter(prefix="/api/staff", tags=["staff"])
 def list_staff(
     active_only: bool = True,
     db: Session = Depends(get_db),
+    user=Depends(require_role("admin", "supervisor", "viewer")),
 ):
     query = db.query(Staff)
     if active_only:
@@ -57,6 +58,7 @@ def list_staff(
 def add_staff(
     req: StaffCreate,
     db: Session = Depends(get_db),
+    user=Depends(require_role("admin", "supervisor")),
 ):
     existing = db.query(Staff).filter(Staff.employee_id == req.employee_id).first()
     if existing:
@@ -84,6 +86,7 @@ def update_staff(
     employee_id: str,
     req: StaffUpdate,
     db: Session = Depends(get_db),
+    user=Depends(require_role("admin", "supervisor")),
 ):
     staff = db.query(Staff).filter(Staff.employee_id == employee_id).first()
     if not staff:
@@ -102,6 +105,7 @@ async def register_face_route(
     face_image_2: Optional[UploadFile] = File(None),
     face_image_3: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
+    user=Depends(require_role("admin", "supervisor")),
 ):
     """
     Register face for a staff member.
@@ -139,6 +143,7 @@ async def register_face_route(
 async def bulk_upload_staff(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    user=Depends(require_role("admin", "supervisor")),
 ):
     """
     Bulk add staff from CSV.
@@ -188,6 +193,7 @@ async def bulk_upload_staff(
 def toggle_staff_status(
     employee_id: str,
     db: Session = Depends(get_db),
+    user=Depends(require_role("admin", "supervisor")),
 ):
     """Toggle staff active/inactive status."""
     staff = db.query(Staff).filter(Staff.employee_id == employee_id).first()

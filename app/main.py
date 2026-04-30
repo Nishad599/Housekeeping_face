@@ -99,9 +99,11 @@ def index(request: Request):
 
 
 @app.get("/login")
-def login_page(request: Request):
+def login_page(request: Request, db: Session = Depends(get_db)):
+    user = get_user_from_cookie(request, db)
+    if user:
+        return RedirectResponse(url="/dashboard")
     return templates.TemplateResponse("login.html", {"request": request})
-
 
 @app.get("/dashboard")
 def dashboard_page(request: Request, db: Session = Depends(get_db)):

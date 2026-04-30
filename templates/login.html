@@ -38,10 +38,7 @@
 
     <script src="/static/js/app.js"></script>
     <script>
-        // Redirect if already logged in
-        if (API.isLoggedIn()) {
-            window.location.href = '/dashboard';
-        }
+        // Server handles redirection if already logged in
 
         async function doLogin() {
             const username = $('#username').value.trim();

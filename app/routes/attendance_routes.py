@@ -64,6 +64,7 @@ async def punch(
 @router.get("/today")
 def get_today_attendance(
     db: Session = Depends(get_db),
+    user=Depends(require_role("admin", "supervisor", "viewer")),
 ):
     """Get today's attendance for all staff."""
     today = date.today()
@@ -130,6 +131,7 @@ def muster_book(
     designation: Optional[str] = None,
     location: Optional[str] = None,
     db: Session = Depends(get_db),
+    user=Depends(require_role("admin", "supervisor", "viewer")),
 ):
     """Get monthly muster book data. Filters: employee_id, name (partial), designation (partial)."""
     return get_muster_book(db, year, month, employee_id, name, designation, location)
@@ -318,6 +320,7 @@ def export_individual_attendance(
     year: int = Query(..., ge=2020),
     employee_id: str = Query(...),
     db: Session = Depends(get_db),
+    user=Depends(require_role("admin", "supervisor", "viewer")),
 ):
     """Export a single staff member's full monthly attendance as Excel."""
     staff = db.query(Staff).filter(Staff.employee_id == employee_id).first()
@@ -393,6 +396,7 @@ def get_punches(
     date_str: Optional[str] = None,
     employee_id: Optional[str] = None,
     db: Session = Depends(get_db),
+    user=Depends(require_role("admin", "supervisor", "viewer")),
 ):
     """Get raw punch records for debugging/audit."""
     query = db.query(AttendancePunch, Staff).join(

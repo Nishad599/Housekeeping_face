@@ -98,7 +98,12 @@ const API = {
     },
 
 
-    logout() {
+    async logout() {
+        try {
+            await fetch('/api/auth/logout', { method: 'POST', headers: this.headers() });
+        } catch (e) {
+            console.error('Logout request failed:', e);
+        }
         this.token = null;
         this.role = null;
         localStorage.removeItem('token');
@@ -115,21 +120,7 @@ const API = {
         return !!this.token;
     },
 
-    async post(url, data) {
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: this.headers(),
-        body: JSON.stringify(data),
-    });
 
-    const text = await res.text();
-
-    try {
-        return JSON.parse(text);
-    } catch (e) {
-        throw new Error(text || 'Server error');
-    }
-},
 isAdmin() {
         return this.role === 'admin';
     },
