@@ -228,8 +228,13 @@ def determine_status(
     # For night/cross-midnight shifts, expected duration uses shift window
     expected_minutes = get_shift_duration_minutes(shift_start_str, shift_end_str)
 
+    # Calculate total duration in minutes
+    total_duration = 0
+    if punch_in and punch_out:
+        total_duration = int((punch_out - punch_in).total_seconds() / 60)
+
     # If worked at least 8 hours 30 minutes, it's a full day regardless of shift duration
-    if regular_minutes >= 510:
+    if total_duration >= 510:
         return "Present"
 
     # If worked less than half the shift, mark as partial
