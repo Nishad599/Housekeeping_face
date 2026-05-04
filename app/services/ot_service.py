@@ -182,12 +182,19 @@ def calculate_work_hours(
 
 def round_ot_minutes(minutes: int) -> int:
     """
-    Floor OT to nearest 60-minute block (full hours only).
-    Example: 135 min (2h 15m) -> 120 min (2h).
+    Threshold-based OT rounding:
+    - If minutes < 30, floor to the hour (e.g., 2h 25m -> 2h 0m).
+    - If minutes >= 30, keep exact minutes (e.g., 2h 30m -> 2h 30m).
     """
     if minutes <= 0:
         return 0
-    return (minutes // 60) * 60
+    
+    hours = minutes // 60
+    remaining_mins = minutes % 60
+    
+    if remaining_mins < 30:
+        return hours * 60
+    return minutes
 
 
 def format_hours_minutes(total_minutes: int) -> str:

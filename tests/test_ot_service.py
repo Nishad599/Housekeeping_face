@@ -5,7 +5,7 @@ Tests cover:
   - Normal day-shift: exact shift window = regular only, excess = OT
   - Weekly-off day: ALL time = OT, regular = 0
   - Cross-midnight night shift: correct duration cap and OT split
-  - OT rounding to nearest 15-min block
+  - OT rounding threshold (floor if < 30m, keep if >= 30m)
   - determine_status for weekly-off punch (should be Present)
 """
 import pytest
@@ -83,12 +83,14 @@ def test_normal_day_with_ot():
     assert result["total_work_minutes"] == 660
 
 
-def test_ot_floored_to_hour():
-    """OT is floored to whole hours (60 min blocks)."""
-    assert round_ot_minutes(135) == 120  # 2h 15m -> 2h
-    assert round_ot_minutes(80) == 60   # 1h 20m -> 1h
-    assert round_ot_minutes(59) == 0    # < 1h -> 0
-    assert round_ot_minutes(120) == 120 # exact 2h -> 2h
+def test_ot_rounding_threshold():
+    """OT is floored if < 30m, kept if >= 30m."""
+    assert round_ot_minutes(135) == 120  # 2h 15m -> 2h (15 < 30)
+    assert round_ot_minutes(145) == 120  # 2h 25m -> 2h (25 < 30)
+    assert round_ot_minutes(150) == 150  # 2h 30m -> 2h 30m (30 >= 30)
+    assert round_ot_minutes(175) == 175  # 2h 55m -> 2h 55m (55 >= 30)
+    assert round_ot_minutes(25) == 0     # 0h 25m -> 0
+    assert round_ot_minutes(40) == 40    # 0h 40m -> 0h 40m
 
 
 def test_less_than_full_shift():
