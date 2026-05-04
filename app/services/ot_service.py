@@ -6,7 +6,7 @@ Rules:
 - Regular hours: capped at the configured shift window duration
 - OT hours: any time beyond the shift window cap
 - Cross-midnight shifts: shift_end < shift_start (e.g. 22:00 → 06:00)
-- OT rounding: to nearest 15-minute block
+- OT rounding: floored to nearest 60-minute block (full hours only)
 - OT minimum: must be >= 60 minutes, otherwise zeroed out
 - Grace period: 30 minutes after shift end — not counted as OT
 - Working days: 6 per week (configurable)
@@ -182,13 +182,12 @@ def calculate_work_hours(
 
 def round_ot_minutes(minutes: int) -> int:
     """
-    Round OT to nearest 15-minute block.
-    0-7 min → 0, 8-22 min → 15, 23-37 min → 30, etc.
+    Floor OT to nearest 60-minute block (full hours only).
+    Example: 135 min (2h 15m) -> 120 min (2h).
     """
     if minutes <= 0:
         return 0
-    blocks = minutes / 15
-    return round(blocks) * 15
+    return (minutes // 60) * 60
 
 
 def format_hours_minutes(total_minutes: int) -> str:

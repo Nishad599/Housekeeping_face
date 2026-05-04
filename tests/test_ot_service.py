@@ -83,12 +83,12 @@ def test_normal_day_with_ot():
     assert result["total_work_minutes"] == 660
 
 
-def test_ot_rounded_to_15():
-    """OT of 32 minutes → rounds up to 30, then 22 → 15."""
-    assert round_ot_minutes(32) == 30
-    assert round_ot_minutes(22) == 15
-    assert round_ot_minutes(7) == 0
-    assert round_ot_minutes(8) == 15
+def test_ot_floored_to_hour():
+    """OT is floored to whole hours (60 min blocks)."""
+    assert round_ot_minutes(135) == 120  # 2h 15m -> 2h
+    assert round_ot_minutes(80) == 60   # 1h 20m -> 1h
+    assert round_ot_minutes(59) == 0    # < 1h -> 0
+    assert round_ot_minutes(120) == 120 # exact 2h -> 2h
 
 
 def test_less_than_full_shift():
