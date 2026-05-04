@@ -211,42 +211,38 @@ def determine_status(
     """
     Determine attendance status for a day.
     
-    Key change: Weekly off stays "Weekly Off" even if staff worked that day.
-    OT is still calculated but status remains "Weekly Off".
+    If staff works on their weekly off day, they are marked as 'Present' or 'Partial'.
+    Otherwise, if it's their weekly off and they didn't work, status is 'Weekly Off'.
     """
-    if is_weekly_off and punch_in is None:
-        return "Weekly Off"
-
-    # Staff came on their weekly off → status stays "Weekly Off" (OT still calculated)
-    if is_weekly_off:
-        return "Weekly Off"
-
+    # 1. No work recorded
     if punch_in is None and punch_out is None:
-        return "Absent"
+        return "Weekly Off" if is_weekly_off else "Absent"
 
+    # 2. Incomplete punches
     if punch_in is not None and punch_out is None:
         return "Partial"
-
     if punch_out is not None and punch_in is None:
         return "Invalid"
 
+    # 3. Both punches exist
     # For night/cross-midnight shifts, expected duration uses shift window
     expected_minutes = get_shift_duration_minutes(shift_start_str, shift_end_str)
 
     # Calculate total duration in minutes
-    total_duration = 0
-    if punch_in and punch_out:
-        total_duration = int((punch_out - punch_in).total_seconds() / 60)
+    total_duration = int((punch_out - punch_in).total_seconds() / 60)
 
     # If worked at least 8 hours 30 minutes, it's a full day regardless of shift duration
     if total_duration >= 510:
         return "Present"
 
-    # If worked less than half the shift, mark as partial
-    if regular_minutes < expected_minutes * 0.5:
+    # Half-shift threshold: if worked less than half the shift, mark as partial
+    # On weekly off, we use total_duration because regular_minutes is 0
+    work_to_check = total_duration if is_weekly_off else regular_minutes
+    if work_to_check < expected_minutes * 0.5:
         return "Partial"
 
     return "Present"
+
 
 
 def is_weekly_off(check_date: date, weekly_off_day: str = None) -> bool:

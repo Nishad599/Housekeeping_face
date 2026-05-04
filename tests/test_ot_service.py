@@ -120,14 +120,14 @@ def test_weekly_off_all_ot():
 
 
 def test_weekly_off_full_shift_all_ot():
-    """Full 9h on weekly-off → regular=0, ot=540."""
+    """Full 9h on weekly-off → regular=0, ot=480 (540 - 60m lunch)."""
     result = calculate_work_hours(
         dt("2024-01-14", "07:00"),
         dt("2024-01-14", "16:00"),
         is_weekly_off_day=True,
     )
     assert result["regular_minutes"] == 0
-    assert result["ot_minutes"] == 540
+    assert result["ot_minutes"] == 480
 
 
 # ─── calculate_work_hours — night shift ───────────────────────────────────────
@@ -161,10 +161,10 @@ def test_night_shift_with_ot():
 # ─── determine_status ─────────────────────────────────────────────────────────
 
 def test_present_on_weekly_off():
-    """If someone punches in on their weekly off, they are Present (not Weekly Off)."""
+    """If someone punches in on their weekly off and works a full shift, they are Present."""
     status = determine_status(
-        punch_in=dt("2024-01-14", "09:00"),
-        punch_out=dt("2024-01-14", "13:00"),
+        punch_in=dt("2024-01-14", "07:00"),
+        punch_out=dt("2024-01-14", "16:00"),
         is_weekly_off=True,
         regular_minutes=0,  # all OT on weekly off
         shift_start_str="07:00",
