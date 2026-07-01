@@ -6,7 +6,7 @@ Rules:
 - Regular hours: capped at the configured shift window duration
 - OT hours: any time beyond the shift window cap
 - Cross-midnight shifts: shift_end < shift_start (e.g. 22:00 → 06:00)
-- OT rounding: floored to nearest 60-minute block (full hours only)
+- OT rounding: rounded to the nearest whole hour (multiple of 60 minutes)
 - OT minimum: must be >= 60 minutes, otherwise zeroed out
 - Grace period: 30 minutes after shift end — not counted as OT
 - Working days: 6 per week (configurable)
@@ -182,19 +182,16 @@ def calculate_work_hours(
 
 def round_ot_minutes(minutes: int) -> int:
     """
-    Threshold-based OT rounding:
-    - If minutes < 30, floor to the hour (e.g., 2h 25m -> 2h 0m).
-    - If minutes >= 30, keep exact minutes (e.g., 2h 30m -> 2h 30m).
+    Round OT minutes to the nearest whole hour (multiple of 60 minutes).
+    E.g., 2h 40m (160m) -> 3h (180m)
+          3h 20m (200m) -> 3h (180m)
+          2h 30m (150m) -> 3h (180m)
+          2h 29m (149m) -> 2h (120m)
     """
     if minutes <= 0:
         return 0
-    
-    hours = minutes // 60
-    remaining_mins = minutes % 60
-    
-    if remaining_mins < 30:
-        return hours * 60
-    return minutes
+    hours = (minutes + 30) // 60
+    return hours * 60
 
 
 def format_hours_minutes(total_minutes: int) -> str:
@@ -217,12 +214,16 @@ def determine_status(
     """
     Determine attendance status for a day.
     
-    If staff works on their weekly off day, they are marked as 'Present' or 'Partial'.
-    Otherwise, if it's their weekly off and they didn't work, status is 'Weekly Off'.
+    On weekly off days, the status always remains 'Weekly Off'.
+    Otherwise, status is determined based on work hours (Present/Partial/Invalid/Absent).
     """
+    # If it is a weekly off day, the status always stays "Weekly Off"
+    if is_weekly_off:
+        return "Weekly Off"
+
     # 1. No work recorded
     if punch_in is None and punch_out is None:
-        return "Weekly Off" if is_weekly_off else "Absent"
+        return "Absent"
 
     # 2. Incomplete punches
     if punch_in is not None and punch_out is None:
@@ -242,8 +243,7 @@ def determine_status(
         return "Present"
 
     # Half-shift threshold: if worked less than half the shift, mark as partial
-    # On weekly off, we use total_duration because regular_minutes is 0
-    work_to_check = total_duration if is_weekly_off else regular_minutes
+    work_to_check = regular_minutes
     if work_to_check < expected_minutes * 0.5:
         return "Partial"
 

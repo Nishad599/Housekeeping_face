@@ -84,13 +84,13 @@ def test_normal_day_with_ot():
 
 
 def test_ot_rounding_threshold():
-    """OT is floored if < 30m, kept if >= 30m."""
+    """OT is rounded to the nearest whole hour."""
     assert round_ot_minutes(135) == 120  # 2h 15m -> 2h (15 < 30)
     assert round_ot_minutes(145) == 120  # 2h 25m -> 2h (25 < 30)
-    assert round_ot_minutes(150) == 150  # 2h 30m -> 2h 30m (30 >= 30)
-    assert round_ot_minutes(175) == 175  # 2h 55m -> 2h 55m (55 >= 30)
+    assert round_ot_minutes(150) == 180  # 2h 30m -> 3h (30 >= 30)
+    assert round_ot_minutes(175) == 180  # 2h 55m -> 3h (55 >= 30)
     assert round_ot_minutes(25) == 0     # 0h 25m -> 0
-    assert round_ot_minutes(40) == 40    # 0h 40m -> 0h 40m
+    assert round_ot_minutes(40) == 60    # 0h 40m -> 1h (40 >= 30)
 
 
 def test_less_than_full_shift():
@@ -163,7 +163,7 @@ def test_night_shift_with_ot():
 # ─── determine_status ─────────────────────────────────────────────────────────
 
 def test_present_on_weekly_off():
-    """If someone punches in on their weekly off and works a full shift, they are Present."""
+    """If someone punches in on their weekly off, they should still be marked as Weekly Off."""
     status = determine_status(
         punch_in=dt("2024-01-14", "07:00"),
         punch_out=dt("2024-01-14", "16:00"),
@@ -172,7 +172,7 @@ def test_present_on_weekly_off():
         shift_start_str="07:00",
         shift_end_str="16:00",
     )
-    assert status == "Present"
+    assert status == "Weekly Off"
 
 
 def test_absent():

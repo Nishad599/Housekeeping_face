@@ -18,27 +18,30 @@ logger = logging.getLogger("migration")
 
 def run_migration():
     """
-    Recalculate attendance records from March 29, 2026 to present 
-    using the new 15-minute punch-in rounding logic.
+    Recalculate ALL attendance records using current OT rounding & weekly-off rules.
+    
+    This ensures:
+      1. Sunday (weekly-off) records are marked "Weekly Off" (not "Present"),
+         with regular_minutes=0 and only OT counted.
+      2. OT is rounded to the nearest whole hour (e.g. 2h40m → 3h, 3h15m → 3h).
     """
     db: Session = SessionLocal()
-    target_date = date(2026, 3, 29)
     
     try:
-        # Get all records from target_date onwards that have both punch in and out
+        # Get ALL records that have both punch in and out
         records = db.query(AttendanceRecord).filter(
-            AttendanceRecord.date >= target_date,
             AttendanceRecord.punch_in_time.isnot(None),
             AttendanceRecord.punch_out_time.isnot(None)
         ).all()
         
-        logger.info(f"Found {len(records)} records satisfying date >= {target_date} with both punches.")
+        logger.info(f"Found {len(records)} records with both punches to recalculate.")
         
         if not records:
             logger.info("Nothing to update.")
             return
 
         updated_count = 0
+        changed_count = 0
         for record in records:
             staff = db.query(Staff).filter(Staff.id == record.staff_id).first()
             if not staff:
@@ -47,7 +50,7 @@ def run_migration():
                 
             on_weekly_off = is_weekly_off(record.date, staff.weekly_off)
             
-            # Recalculate hours (which now uses the 15-minute round-up inside ot_service)
+            # Recalculate hours with current rounding logic
             hours = calculate_work_hours(
                 record.punch_in_time,
                 record.punch_out_time,
@@ -56,7 +59,7 @@ def run_migration():
                 is_weekly_off_day=on_weekly_off,
             )
             
-            # Recalculate status based on the new hours
+            # Recalculate status
             new_status = determine_status(
                 record.punch_in_time,
                 record.punch_out_time,
@@ -66,25 +69,42 @@ def run_migration():
                 shift_end_str=staff.shift_end,
             )
             
-            # Compare previous values for logging (optional, debugging)
+            # Track what changed for logging
             old_ot = record.ot_minutes
             old_total = record.total_work_minutes
+            old_regular = record.regular_minutes
+            old_status = record.status
             
             record.total_work_minutes = hours["total_work_minutes"]
             record.regular_minutes = hours["regular_minutes"]
             record.ot_minutes = hours["ot_minutes"]
             record.status = new_status
             
-            if old_ot != record.ot_minutes or old_total != record.total_work_minutes:
+            has_changes = (
+                old_ot != record.ot_minutes or
+                old_total != record.total_work_minutes or
+                old_regular != record.regular_minutes or
+                old_status != record.status
+            )
+            
+            if has_changes:
+                changed_count += 1
                 logger.info(
-                    f"Updated Record ID={record.id} Date={record.date} Staff={staff.employee_id} "
-                    f"| OT {old_ot}m -> {record.ot_minutes}m, Total {old_total}m -> {record.total_work_minutes}m"
+                    f"CHANGED Record ID={record.id} Date={record.date} "
+                    f"Staff={staff.employee_id} "
+                    f"| Status: '{old_status}' -> '{record.status}' "
+                    f"| OT: {old_ot}m -> {record.ot_minutes}m "
+                    f"| Regular: {old_regular}m -> {record.regular_minutes}m "
+                    f"| Total: {old_total}m -> {record.total_work_minutes}m"
                 )
             
             updated_count += 1
             
         db.commit()
-        logger.info(f"Migration completed successfully. Recalculated {updated_count} records.")
+        logger.info(
+            f"Migration completed. Processed {updated_count} records, "
+            f"{changed_count} had changes applied."
+        )
 
     except Exception as e:
         logger.error(f"Migration failed: {e}")
@@ -93,5 +113,8 @@ def run_migration():
         db.close()
 
 if __name__ == "__main__":
-    logger.info("Starting attendance hour recalculation (15-min round-up migration)...")
+    logger.info(
+        "Starting full attendance recalculation "
+        "(OT rounding + Sunday/weekly-off status migration)..."
+    )
     run_migration()
