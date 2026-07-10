@@ -91,6 +91,36 @@ def get_today_attendance(
     ]
 
 
+@router.get("/today-board")
+def get_today_board(db: Session = Depends(get_db)):
+    """
+    PUBLIC endpoint for the punch kiosk sidebar.
+    Returns only name + punch times for staff who punched today,
+    so workers can see they've already punched (prevents double attempts).
+    No auth: exposes no IDs, phones, hours or status.
+    """
+    today = date.today()
+    records = db.query(AttendanceRecord, Staff).join(
+        Staff, AttendanceRecord.staff_id == Staff.id
+    ).filter(
+        AttendanceRecord.date == today,
+        AttendanceRecord.punch_in_time.isnot(None),
+    ).order_by(AttendanceRecord.punch_in_time.desc()).all()
+
+    return {
+        "date": today.isoformat(),
+        "count": len(records),
+        "entries": [
+            {
+                "name": staff.name,
+                "punch_in": rec.punch_in_time.strftime("%I:%M %p") if rec.punch_in_time else None,
+                "punch_out": rec.punch_out_time.strftime("%I:%M %p") if rec.punch_out_time else None,
+            }
+            for rec, staff in records
+        ],
+    }
+
+
 @router.get("/staff-today/{employee_id}")
 def get_staff_today_attendance(
     employee_id: str,
@@ -246,8 +276,9 @@ def export_muster_excel(
         "header": "2C3E50",
         "P": "D5F5E3", # Present - Green
         "A": "FADBD8", # Absent - Red
-        "WO": "EBEDEF", # Weekly Off - Gray
-        "PL": "FEF9E7"  # Partial - Yellow
+        "WO": "EBEDEF",  # Weekly Off - Gray
+        "WO*": "D6EAF8", # Weekly Off but WORKED (OT credited) - Blue
+        "PL": "FEF9E7"   # Partial - Yellow
     }
     
     header_font = Font(bold=True, color="FFFFFF")

@@ -1,5 +1,6 @@
 @echo off
 title Git Push
+cd /d %~dp0
 echo ========================================
 echo   Quick Git Push
 echo ========================================

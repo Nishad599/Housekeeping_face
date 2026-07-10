@@ -129,20 +129,24 @@ def record_punch(
         AttendanceRecord.date == today,
     ).first()
 
+    # On a weekly-off day the record must NEVER show Present/Partial —
+    # it stays "Weekly Off" and any worked time is credited as 100% OT.
+    initial_status = "Weekly Off" if is_weekly_off(today, staff.weekly_off) else "Partial"
+
     if punch_type == "IN":
         if record is None:
             record = AttendanceRecord(
                 staff_id=staff_id,
                 date=today,
                 punch_in_time=now,
-                status="Partial",  # Will be updated on punch-out
+                status=initial_status,  # Will be updated on punch-out
             )
             db.add(record)
         else:
             # Second IN (after a completed IN-OUT pair) - update
             record.punch_in_time = now
             record.punch_out_time = None
-            record.status = "Partial"
+            record.status = initial_status
     else:  # OUT
         if record is None:
             # Punch-out without punch-in — anomaly
@@ -273,12 +277,16 @@ def edit_attendance_record(
         h, m = punch_out_str.split(":")
         record.punch_out_time = datetime.combine(record.date, __import__("datetime").time(int(h), int(m)))
 
+    on_weekly_off = is_weekly_off(record.date, staff.weekly_off) if staff else False
+
     if status:
+        # WEEKLY-OFF GUARD: never allow Present/Partial on a weekly-off day
+        if on_weekly_off and status in ("Present", "Partial"):
+            status = "Weekly Off"
         record.status = status
 
     # Recalculate hours if both punches exist
     if record.punch_in_time and record.punch_out_time:
-        on_weekly_off = is_weekly_off(record.date, staff.weekly_off) if staff else False
         hours = calculate_work_hours(
             record.punch_in_time,
             record.punch_out_time,
@@ -361,11 +369,15 @@ def get_muster_matrix(
     ).all()
 
     # Organize records by staff_id and day
-    record_map = {} # {staff_id: {day: status}}
+    record_map = {} # {staff_id: {day: initial}}
     for r in records:
         if r.staff_id not in record_map:
             record_map[r.staff_id] = {}
-        record_map[r.staff_id][r.date.day] = status_to_initial(r.status)
+        initial = status_to_initial(r.status)
+        # Worked weekly-off: display "WO*" so it's visibly different from a plain WO
+        if initial == "WO" and (r.ot_minutes or 0) > 0:
+            initial = "WO*"
+        record_map[r.staff_id][r.date.day] = initial
 
     staff_data = []
     for s in all_staff:
@@ -375,7 +387,8 @@ def get_muster_matrix(
             "days": {},
             "summary": {"P": 0, "A": 0, "PL": 0, "WO": 0, "I": 0, "Total OT": 0}
         }
-        
+
+        joined_date = s.created_at.date() if s.created_at else None
         staff_records = record_map.get(s.id, {})
         for day in days:
             current_date = date(year, month, day)
@@ -385,13 +398,17 @@ def get_muster_matrix(
                 # Check for future vs past for unrecorded days
                 if current_date > date.today():
                     status = "-"
+                elif joined_date and current_date < joined_date:
+                    status = "-"   # staff had not joined yet — not Absent
                 elif is_weekly_off(current_date, s.weekly_off):
                     status = "WO"
                 else:
                     status = "A"
             
             row["days"][day] = status
-            if status in row["summary"]:
+            if status == "WO*":
+                row["summary"]["WO"] += 1   # counts as WO, never as Present
+            elif status in row["summary"]:
                 row["summary"][status] += 1
 
         # Calculate OT summary for the month
@@ -467,8 +484,11 @@ def get_muster_book(
                 })
             else:
                 # Determine status for missing day
+                joined_date = staff.created_at.date() if staff.created_at else None
                 if curr_date > date.today():
                     status = "-"
+                elif joined_date and curr_date < joined_date:
+                    status = "-"   # staff had not joined yet — not Absent
                 elif is_weekly_off(curr_date, staff.weekly_off):
                     status = "Weekly Off"
                 else:
@@ -563,6 +583,13 @@ def manual_mark_attendance(
         h, m = punch_out_str.split(":")
         record.punch_out_time = datetime.combine(mark_date, time(int(h), int(m)))
 
+    # WEEKLY-OFF GUARD: a weekly-off day can never become Present/Partial,
+    # even via manual marking (UI defaults to "Present"). Worked time on a
+    # weekly off is credited entirely as OT; the day stays "Weekly Off".
+    on_weekly_off = is_weekly_off(mark_date, staff.weekly_off)
+    if on_weekly_off and status in ("Present", "Partial"):
+        status = "Weekly Off"
+
     record.status = status
     record.is_edited = True
     record.edited_by = editor
@@ -571,7 +598,6 @@ def manual_mark_attendance(
 
     # Calculate hours
     if record.punch_in_time and record.punch_out_time:
-        on_weekly_off = is_weekly_off(mark_date, staff.weekly_off)
         hours = calculate_work_hours(
             record.punch_in_time,
             record.punch_out_time,

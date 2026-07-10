@@ -182,16 +182,15 @@ def calculate_work_hours(
 
 def round_ot_minutes(minutes: int) -> int:
     """
-    Round OT minutes to the nearest whole hour (multiple of 60 minutes).
-    E.g., 2h 40m (160m) -> 3h (180m)
-          3h 20m (200m) -> 3h (180m)
-          2h 30m (150m) -> 3h (180m)
-          2h 29m (149m) -> 2h (120m)
+    Round OT minutes to the nearest OT_ROUND_MINUTES block (configurable in .env).
+      OT_ROUND_MINUTES=60 → nearest hour   (160m -> 180m)
+      OT_ROUND_MINUTES=30 → nearest half   (160m -> 150m, 165m -> 180m)  [matches manual register]
+      OT_ROUND_MINUTES=15 → nearest quarter
     """
     if minutes <= 0:
         return 0
-    hours = (minutes + 30) // 60
-    return hours * 60
+    block = max(1, settings.OT_ROUND_MINUTES)
+    return ((minutes + block // 2) // block) * block
 
 
 def format_hours_minutes(total_minutes: int) -> str:

@@ -107,6 +107,15 @@ class MusterBookQuery(BaseModel):
 
 
 # ─── Auth ──────────────────────────────────────────
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+class ResetPasswordRequest(BaseModel):
+    new_password: str
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str

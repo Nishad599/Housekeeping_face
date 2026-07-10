@@ -57,6 +57,8 @@ class Settings:
     SHIFT_START: str = os.getenv("SHIFT_START", "07:00")
     SHIFT_END: str = os.getenv("SHIFT_END", "16:00")
     OT_RATE_MULTIPLIER: float = float(os.getenv("OT_RATE_MULTIPLIER", "1.5"))
+    # OT rounding block in minutes: 60 = nearest hour, 30 = nearest half-hour, 15 = nearest quarter
+    OT_ROUND_MINUTES: int = int(os.getenv("OT_ROUND_MINUTES", "30"))
     WORKING_DAYS_PER_WEEK: int = int(os.getenv("WORKING_DAYS_PER_WEEK", "6"))
     DEFAULT_WEEKLY_OFF: str = os.getenv("DEFAULT_WEEKLY_OFF", "Sunday")
 
